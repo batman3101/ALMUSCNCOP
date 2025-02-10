@@ -166,7 +166,6 @@ def print_service_account_email():
         st.error(f"서비스 계정 정보 읽기 중 오류 발생: {str(e)}")
 
 def sync_production_with_sheets():
-    """구글 시트에서 생산 데이터 동기화"""
     try:
         sheets = init_google_sheets()
         result = sheets.values().get(
@@ -176,8 +175,10 @@ def sync_production_with_sheets():
         
         values = result.get('values', [])
         if values:
-            columns = ['날짜', '작업자', '라인번호', '모델차수', 
-                      '목표수량', '생산수량', '불량수량', '특이사항']
+            columns = [
+                '날짜', '작업자', '라인번호', '모델차수',
+                '목표수량', '생산수량', '불량수량', '특이사항'
+            ]
             production_df = pd.DataFrame(values, columns=columns)
             st.session_state.daily_records = production_df
             return True
@@ -796,6 +797,9 @@ def show_daily_production():
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
                             (st.session_state.daily_records['작업자'] == selected_record['작업자']))
+                        mask = (
+                            (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
+                            (st.session_state.daily_records['작업자'] == selected_record['작업자'])
                         )
                         st.session_state.daily_records.loc[mask, '라인번호'] = line_number
                         st.session_state.daily_records.loc[mask, '모델차수'] = model
@@ -858,10 +862,9 @@ def show_daily_production():
                         worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
                         
                         # 중복 데이터 중 마지막 항목을 제외한 나머지 삭제
-                        mask = (
-                            (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) &
-                            (st.session_state.daily_records['작업자'] == worker_id)))
-                        )
+                        mask = (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) & (st.session_state.daily_records['작업자'] == worker_id)
+                            # 이 줄은 위의 mask 정의에 이미 포함되어 있으므로 삭제
+                            # 중복된 조건문 제거
                         duplicate_indices = st.session_state.daily_records[mask].index[:-1]
                         
                         # 데이터 삭제
@@ -1468,15 +1471,13 @@ def backup_users_to_sheets():
         return False
 
 def check_duplicate_records():
-    """중복 데이터 검사"""
     if len(st.session_state.daily_records) == 0:
         return False
-        
+    
     duplicates_found = False
     for worker_id in st.session_state.daily_records['작업자'].unique():
-        worker_records = st.session_state.daily_records[
-            st.session_state.daily_records['작업자'] == worker_id
-        ]
+        mask = st.session_state.daily_records['작업자'] == worker_id
+        worker_records = st.session_state.daily_records[mask]
         
         if len(worker_records) > 1:
             duplicate_indices = worker_records.index[:-1]
@@ -1485,21 +1486,28 @@ def check_duplicate_records():
     
     return duplicates_found
 
-def update_production_record(edit_date, selected_record, line_number, model, 
-                           target_qty, prod_qty, defect_qty, note):
-    """생산 기록 업데이트"""
+def update_production_record(
+    edit_date, selected_record, line_number, model,
+    target_qty, prod_qty, defect_qty, note
+):
     try:
+        date_str = edit_date.strftime('%Y-%m-%d')
         mask = (
-            (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
+            (st.session_state.daily_records['날짜'].astype(str) == date_str) &
             (st.session_state.daily_records['작업자'] == selected_record['작업자'])
         )
         
-        st.session_state.daily_records.loc[mask, '라인번호'] = line_number
-        st.session_state.daily_records.loc[mask, '모델차수'] = model
-        st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
-        st.session_state.daily_records.loc[mask, '생산수량'] = prod_qty
-        st.session_state.daily_records.loc[mask, '불량수량'] = defect_qty
-        st.session_state.daily_records.loc[mask, '특이사항'] = note
+        updates = {
+            '라인번호': line_number,
+            '모델차수': model,
+            '목표수량': target_qty,
+            '생산수량': prod_qty,
+            '불량수량': defect_qty,
+            '특이사항': note
+        }
+        
+        for column, value in updates.items():
+            st.session_state.daily_records.loc[mask, column] = value
         
         return True
     except Exception as e:
