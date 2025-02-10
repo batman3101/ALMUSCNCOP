@@ -166,40 +166,27 @@ def print_service_account_email():
         st.error(f"서비스 계정 정보 읽기 중 오류 발생: {str(e)}")
 
 def sync_production_with_sheets():
+    """구글 시트에서 생산 데이터 동기화"""
     try:
         sheets = init_google_sheets()
         
-        # 구글 시트에서 생산 데이터 읽기
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='production!A2:H'  # A2부터 H열까지
+            range='production!A2:H'
         ).execute()
         
         values = result.get('values', [])
         if values:
             # 구글 시트 데이터를 DataFrame으로 변환
-            production_df = pd.DataFrame(values, columns=[
-                '날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항'
-            ])
-            
-            # 날짜 형식 변환
-            production_df['날짜'] = pd.to_datetime(production_df['날짜']).dt.strftime('%Y-%m-%d')
-            
-            # 작업자 이름을 사번으로 변환
-            worker_ids = st.session_state.workers.set_index('이름')['사번'].to_dict()
-            production_df['작업자'] = production_df['작업자'].map(worker_ids)
-            
-            # 숫자 데이터 변환
-            production_df['목표수량'] = pd.to_numeric(production_df['목표수량'], errors='coerce')
-            production_df['생산수량'] = pd.to_numeric(production_df['생산수량'], errors='coerce')
-            production_df['불량수량'] = pd.to_numeric(production_df['불량수량'], errors='coerce')
+            columns = ['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+            production_df = pd.DataFrame(values, columns=columns)
             
             # 세션 스테이트 업데이트
             st.session_state.daily_records = production_df
             return True
         return False
     except Exception as e:
-        st.error(f"구글 시트 동기화 중 오류 발생: {str(e)}")
+        st.error(f"생산 데이터 동기화 중 오류 발생: {str(e)}")
         return False
 
 def backup_production_to_sheets():
@@ -811,10 +798,8 @@ def show_daily_production():
                         # 데이터 수정
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
-                            (st.session_state.daily_records['작업자'] == selected_record['작업자'])
+                            (st.session_state.daily_records['작업자'] == selected_record['작업자']))
                         )
-                        )
-                        
                         st.session_state.daily_records.loc[mask, '라인번호'] = line_number
                         st.session_state.daily_records.loc[mask, '모델차수'] = model
                         st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
@@ -878,8 +863,7 @@ def show_daily_production():
                         # 중복 데이터 중 마지막 항목을 제외한 나머지 삭제
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) &
-                            (st.session_state.daily_records['작업자'] == worker_id)
-                        )
+                            (st.session_state.daily_records['작업자'] == worker_id)))
                         )
                         duplicate_indices = st.session_state.daily_records[mask].index[:-1]
                         
@@ -1492,16 +1476,37 @@ def check_duplicate_records():
         duplicates_found = False
         for worker_id in st.session_state.daily_records['작업자'].unique():
             # 각 작업자별로 가장 최근 기록을 제외한 중복 기록 찾기
-            mask = st.session_state.daily_records['작업자'] == worker_id
-            duplicate_indices = st.session_state.daily_records[mask].index[:-1]
+            worker_records = st.session_state.daily_records[
+                st.session_state.daily_records['작업자'] == worker_id
+            ]
             
-            if len(duplicate_indices) > 0:
-                # 중복 기록 삭제
+            if len(worker_records) > 1:
+                # 가장 최근 기록을 제외한 중복 기록 삭제
+                duplicate_indices = worker_records.index[:-1]
                 st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
                 duplicates_found = True
         
         return duplicates_found
     return False
+
+def update_production_record(edit_date, selected_record, line_number, model, target_qty, prod_qty, defect_qty, note):
+    try:
+        mask = (
+            (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
+            (st.session_state.daily_records['작업자'] == selected_record['작업자'])
+        )
+        
+        st.session_state.daily_records.loc[mask, '라인번호'] = line_number
+        st.session_state.daily_records.loc[mask, '모델차수'] = model
+        st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
+        st.session_state.daily_records.loc[mask, '생산수량'] = prod_qty
+        st.session_state.daily_records.loc[mask, '불량수량'] = defect_qty
+        st.session_state.daily_records.loc[mask, '특이사항'] = note
+        
+        return True
+    except Exception as e:
+        st.error(f"생산 기록 업데이트 중 오류 발생: {str(e)}")
+        return False
 
 if __name__ == "__main__":
     main()
