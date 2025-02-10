@@ -118,27 +118,37 @@ def init_admin_account():
     return False
 
 def sync_workers_with_sheets():
+    """구글 시트에서 작업자 데이터 동기화"""
     try:
         sheets = init_google_sheets()
         
         # 구글 시트에서 작업자 데이터 읽기
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='worker!A2:E'  # A2부터 E열까지
+            range='worker!A2:E'  # A2부터 E열까지 (STT, 사번, 이름, 부서, 라인번호)
         ).execute()
         
         values = result.get('values', [])
         if values:
+            # 데이터가 5개 컬럼을 가지도록 보장
+            formatted_values = []
+            for row in values:
+                # 부족한 컬럼을 빈 문자열로 채움
+                while len(row) < 5:
+                    row.append('')
+                formatted_values.append(row[:5])  # 5개 컬럼만 사용
+            
             # 구글 시트 데이터를 DataFrame으로 변환
-            workers_df = pd.DataFrame(values, columns=['STT', '사번', '이름', '부서', '라인번호'])
-            # 숫자로 된 STT를 2자리 문자열로 변환 (예: 1 -> "01")
-            workers_df['STT'] = workers_df['STT'].astype(str).str.zfill(2)
+            workers_df = pd.DataFrame(
+                formatted_values,
+                columns=['STT', '사번', '이름', '부서', '라인번호']
+            )
             # 세션 스테이트 업데이트
             st.session_state.workers = workers_df
             return True
         return False
     except Exception as e:
-        st.error(f"구글 시트 동기화 중 오류 발생: {str(e)}")
+        st.error(f"작업자 데이터 동기화 중 오류 발생: {str(e)}")
         return False
 
 def print_service_account_email():
@@ -209,6 +219,7 @@ def backup_production_to_sheets():
             
             # DataFrame을 리스트로 변환
             values = [backup_data.columns.tolist()] + backup_data.values.tolist()
+            )
             
             # 기존 데이터 삭제
             sheets.values().clear(
@@ -867,6 +878,7 @@ def show_daily_production():
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) &
                             (st.session_state.daily_records['작업자'] == worker_id)
+                        )
                         )
                         duplicate_indices = st.session_state.daily_records[mask].index[:-1]
                         
