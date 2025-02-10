@@ -11,7 +11,6 @@ import numpy as np
 
 # Google Sheets API 설정
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-SERVICE_ACCOUNT_FILE = 'cnc-op-kpi-management-d552546430e8.json'
 
 # 구글 시트 ID 설정
 SPREADSHEET_ID = '12l3VeNoTvBQwhKZ29-VqWElEt_vkXEP1wcr73v6ODFs'  # URL에서 ID 부분만 추출
@@ -37,10 +36,25 @@ if 'models' not in st.session_state:
     st.session_state.models = pd.DataFrame(columns=['STT', 'MODEL', 'PROCESS'])
 
 def init_google_sheets():
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build('sheets', 'v4', credentials=credentials)
-    return service.spreadsheets()
+    try:
+        # Streamlit Cloud 환경에서는 secrets에서 서비스 계정 정보를 가져옴
+        if hasattr(st.secrets, "gcp_service_account"):
+            credentials = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=SCOPES
+            )
+        # 로컬 환경에서는 파일에서 서비스 계정 정보를 가져옴
+        else:
+            credentials = service_account.Credentials.from_service_account_file(
+                'cnc-op-kpi-management-d552546430e8.json',
+                scopes=SCOPES
+            )
+        
+        service = build('sheets', 'v4', credentials=credentials)
+        return service.spreadsheets()
+    except Exception as e:
+        st.error(f"Google Sheets API 초기화 중 오류 발생: {str(e)}")
+        return None
 
 def show_login():
     st.title("🔐 CNC 작업자 KPI 관리 시스템 로그인")
@@ -920,8 +934,6 @@ def show_monthly_report():
             # 이전 월 데이터 가져오기 및 KPI 대시보드 표시
             current_date = pd.to_datetime(month + '-01')
             previous_month = (current_date - pd.DateOffset(months=1)).strftime('%Y-%m')
-            previous_data = st.session_state.daily_records[
-                pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == previous_month
             ]
             show_best_kpi_dashboard(monthly_data, previous_data, "월간")
             
