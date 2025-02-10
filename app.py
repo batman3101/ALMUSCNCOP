@@ -37,13 +37,23 @@ if 'models' not in st.session_state:
 
 def init_google_sheets():
     try:
-        # Streamlit Cloud의 secrets에서 서비스 계정 정보 가져오기
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
-            scopes=SCOPES
-        )
+        # 서비스 계정 정보 가져오기 시도
+        try:
+            # Streamlit Cloud 환경
+            credentials = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=SCOPES
+            )
+        except Exception:
+            # 로컬 환경
+            credentials = service_account.Credentials.from_service_account_file(
+                'cnc-op-kpi-management-d552546430e8.json',
+                scopes=SCOPES
+            )
+        
         service = build('sheets', 'v4', credentials=credentials)
-        return service.spreadsheets()
+        sheets = service.spreadsheets()
+        return sheets
     except Exception as e:
         st.error(f"Google Sheets API 초기화 중 오류 발생: {str(e)}")
         return None
@@ -116,7 +126,14 @@ def sync_workers_with_sheets():
 
 def print_service_account_email():
     try:
-        service_account_info = st.secrets["gcp_service_account"]
+        try:
+            # Streamlit Cloud 환경
+            service_account_info = st.secrets["gcp_service_account"]
+        except Exception:
+            # 로컬 환경
+            with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
+                service_account_info = json.load(f)
+        
         st.info(f"구글 시트 공유 설정에 추가할 이메일: {service_account_info['client_email']}")
     except Exception as e:
         st.error(f"서비스 계정 정보 읽기 중 오류 발생: {str(e)}")
