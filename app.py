@@ -1489,6 +1489,7 @@ def backup_users_to_sheets():
 def check_duplicate_records():
     """중복 데이터 검사"""
     if len(st.session_state.daily_records) > 0:
+        duplicates_found = False
         for worker_id in st.session_state.daily_records['작업자'].unique():
             # 각 작업자별로 가장 최근 기록을 제외한 중복 기록 찾기
             mask = st.session_state.daily_records['작업자'] == worker_id
@@ -1497,7 +1498,9 @@ def check_duplicate_records():
             if len(duplicate_indices) > 0:
                 # 중복 기록 삭제
                 st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
-                return True
+                duplicates_found = True
+        
+        return duplicates_found
     return False
 
 if __name__ == "__main__":
