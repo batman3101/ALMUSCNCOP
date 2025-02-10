@@ -170,16 +170,27 @@ def sync_production_with_sheets():
         sheets = init_google_sheets()
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='production!A2:H'  # 헤더 제외하고 데이터만 가져오기
+            range='production!A2:H'  # A부터 H까지 8개 컬럼
         ).execute()
         
         values = result.get('values', [])
         if not values:
             return False
             
-        # DataFrame 생성
-        columns = ['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
-        production_df = pd.DataFrame(values, columns=columns)
+        # 데이터 정리 및 변환
+        formatted_values = []
+        for row in values:
+            # 부족한 컬럼을 빈 문자열로 채움
+            while len(row) < 8:  # 8개 컬럼이 되도록 보장
+                row.append('')
+            formatted_values.append(row[:8])
+        
+        # DataFrame 생성 (8개 컬럼 모두 포함)
+        columns = [
+            '날짜', '작업자', '라인번호', '모델차수',
+            '목표수량', '생산수량', '불량수량', '특이사항'
+        ]
+        production_df = pd.DataFrame(formatted_values, columns=columns)
         
         # 숫자 데이터 변환
         numeric_columns = ['목표수량', '생산수량', '불량수량']
@@ -218,13 +229,15 @@ def backup_production_to_sheets():
         # 날짜 형식 통일
         backup_data['날짜'] = pd.to_datetime(backup_data['날짜']).dt.strftime('%Y-%m-%d')
         
-        # 숫자 데이터를 문자열로 변환
-        numeric_columns = ['목표수량', '생산수량', '불량수량']
-        for col in numeric_columns:
-            backup_data[col] = backup_data[col].astype(int).astype(str)
+        # 필요한 컬럼만 선택 (순서 유지)
+        columns = [
+            '날짜', '작업자', '라인번호', '모델차수',
+            '목표수량', '생산수량', '불량수량', '특이사항'
+        ]
+        backup_data = backup_data[columns]
         
         # DataFrame을 리스트로 변환
-        values = [['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']]
+        values = [columns]  # 헤더 추가
         values.extend(backup_data.values.tolist())
         
         # 기존 데이터 삭제
@@ -234,9 +247,7 @@ def backup_production_to_sheets():
         ).execute()
         
         # 새 데이터 쓰기
-        body = {
-            'values': values
-        }
+        body = {'values': values}
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range='production!A1',
