@@ -697,10 +697,6 @@ def show_dashboard():
 def show_daily_production():
     st.title("📝 일일 생산 실적 입력/수정")
     
-    # 모델차수 데이터 동기화
-    if len(st.session_state.models) == 0:
-        sync_models_with_sheets()
-    
     tab1, tab2, tab3 = st.tabs(["신규 입력", "데이터 수정", "중복 데이터 관리"])
     
     with tab1:
@@ -764,83 +760,82 @@ def show_daily_production():
         if len(st.session_state.daily_records) > 0:
             # 날짜 선택
             edit_date = st.date_input("수정할 날짜 선택", datetime.now(), key="edit_date")
+            date_str = edit_date.strftime('%Y-%m-%d')
             
             # 선택된 날짜의 데이터 필터링
             daily_data = st.session_state.daily_records[
-                pd.to_datetime(st.session_state.daily_records['날짜']).dt.date == edit_date
-            ]
+                st.session_state.daily_records['날짜'].astype(str) == date_str
+            ].copy()
             
             if len(daily_data) > 0:
-                # 수정할 데이터 선택
+                # 작업자 이름으로 변환
                 worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
                 daily_data['작업자명'] = daily_data['작업자'].map(worker_names)
                 
-                # 수정할 레코드 선택
-                edit_records = st.dataframe(
+                # 데이터 표시
+                st.dataframe(
                     daily_data[['작업자명', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']],
                     hide_index=True
                 )
                 
                 # 수정할 작업자 선택
-                selected_worker = st.selectbox(
+                worker_id = st.selectbox(
                     "수정할 작업자 선택",
-                    options=daily_data['작업자명'].unique()
+                    options=daily_data['작업자'].unique(),
+                    format_func=lambda x: worker_names.get(x, '알 수 없는 작업자')
                 )
                 
-                # 선택된 작업자의 데이터
-                selected_record = daily_data[daily_data['작업자명'] == selected_worker].iloc[0]
-                
-                with st.form("edit_production_form"):
-                    # 라인번호 선택
-                    all_line_numbers = st.session_state.workers['라인번호'].unique().tolist()
-                    line_number = st.selectbox(
-                        "라인번호",
-                        options=all_line_numbers,
-                        index=all_line_numbers.index(selected_record['라인번호']) if selected_record['라인번호'] in all_line_numbers else 0,
-                        key="edit_line"
-                    )
+                if worker_id:
+                    # 선택된 작업자의 데이터
+                    selected_record = daily_data[daily_data['작업자'] == worker_id].iloc[0]
+                    worker_data = st.session_state.workers[
+                        st.session_state.workers['사번'] == worker_id
+                    ].iloc[0]
                     
-                    # 모델차수 선택
-                    if len(st.session_state.models) > 0:
-                        model_options = [f"{row['MODEL']}-{row['PROCESS']}" 
-                                       for _, row in st.session_state.models.iterrows()]
-                        model = st.selectbox("모델차수", 
-                                           options=sorted(set(model_options)),
-                                           key="edit_model")
-                    else:
-                        model = st.text_input("모델차수")
-                    
-                    # 기존 데이터를 기본값으로 설정
-                    target_qty = st.number_input("목표수량", min_value=0, value=int(selected_record['목표수량']))
-                    produced_qty = st.number_input("생산수량", min_value=0, value=int(selected_record['생산수량']))
-                    defect_qty = st.number_input("불량수량", min_value=0, value=int(selected_record['불량수량']))
-                    notes = st.text_area("특이사항", value=selected_record['특이사항'] if pd.notna(selected_record['특이사항']) else "")
-                    
-                    update_submitted = st.form_submit_button("수정")
-                    
-                    if update_submitted:
-                        # 데이터 수정
-                        mask = (
-                            (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
-                            (st.session_state.daily_records['작업자'] == selected_record['작업자']))
-                        # 괄호 제거
-                        st.session_state.daily_records.loc[mask, '라인번호'] = line_number
-                        st.session_state.daily_records.loc[mask, '모델차수'] = model
-                        st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
-                        st.session_state.daily_records.loc[mask, '생산수량'] = produced_qty
-                        st.session_state.daily_records.loc[mask, '불량수량'] = defect_qty
-                        st.session_state.daily_records.loc[mask, '특이사항'] = notes
+                    with st.form("edit_production_form"):
+                        st.write(f"선택된 작업자: {worker_data['이름']} ({worker_data['라인번호']})")
                         
-                        # 구글 시트 백업
-                        if backup_production_to_sheets():
-                            st.success("데이터가 성공적으로 수정되었습니다.")
+                        # 모델차수 선택
+                        if len(st.session_state.models) > 0:
+                            model_options = [
+                                f"{row['MODEL']}-{row['PROCESS']}" 
+                                for _, row in st.session_state.models.iterrows()
+                            ]
+                            model = st.selectbox(
+                                "모델차수", 
+                                options=sorted(set(model_options)),
+                                index=sorted(set(model_options)).index(selected_record['모델차수'])
+                                if selected_record['모델차수'] in model_options else 0
+                            )
                         else:
-                            st.warning("데이터가 수정되었으나 백업 중 오류가 발생했습니다.")
+                            model = st.text_input("모델차수", value=selected_record['모델차수'])
                         
-                        # 화면 새로고침
-                        st.rerun()
+                        # 수량 입력
+                        target_qty = st.number_input("목표수량", min_value=0, value=int(selected_record['목표수량']))
+                        produced_qty = st.number_input("생산수량", min_value=0, value=int(selected_record['생산수량']))
+                        defect_qty = st.number_input("불량수량", min_value=0, value=int(selected_record['불량수량']))
+                        notes = st.text_area("특이사항", value=selected_record['특이사항'])
+                        
+                        if st.form_submit_button("수정"):
+                            # 데이터 업데이트
+                            mask = (
+                                (st.session_state.daily_records['날짜'].astype(str) == date_str) &
+                                (st.session_state.daily_records['작업자'] == worker_id)
+                            )
+                            
+                            st.session_state.daily_records.loc[mask, '모델차수'] = model
+                            st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
+                            st.session_state.daily_records.loc[mask, '생산수량'] = produced_qty
+                            st.session_state.daily_records.loc[mask, '불량수량'] = defect_qty
+                            st.session_state.daily_records.loc[mask, '특이사항'] = notes
+                            
+                            if backup_production_to_sheets():
+                                st.success("데이터가 성공적으로 수정되었습니다.")
+                                st.rerun()
+                            else:
+                                st.error("데이터 백업 중 오류가 발생했습니다.")
             else:
-                st.info(f"{edit_date} 날짜의 생산 데이터가 없습니다.")
+                st.info(f"{date_str} 날짜의 생산 데이터가 없습니다.")
         else:
             st.info("수정할 생산 실적이 없습니다.")
 
@@ -893,7 +888,7 @@ def show_daily_production():
                         
                         # 구글 시트 백업
                         if backup_production_to_sheets():
-                            st.success(f"{selected_worker}의 중복 데이터가 성공적으로 삭제되었습니다.")
+                            st.success(f"selected_worker의 중복 데이터가 성공적으로 삭제되었습니다.")
                         else:
                             st.warning("데이터는 삭제되었으나 백업 중 오류가 발생했습니다.")
                         
