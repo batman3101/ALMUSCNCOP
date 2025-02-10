@@ -1108,7 +1108,6 @@ def show_user_management():
     # 기존 사용자 목록 표시
     if len(st.session_state.users) > 0:
         st.subheader("등록된 사용자 목록")
-        # 표시할 컬럼 선택 및 복사
         display_users = st.session_state.users[['이메일', '이름', '권한']].copy()
         display_users.insert(0, 'STT', range(1, len(display_users) + 1))
         display_users['STT'] = display_users['STT'].apply(lambda x: f"{x:02d}")
@@ -1152,6 +1151,34 @@ def show_user_management():
                 st.rerun()
             else:
                 st.error("사용자 등록 중 오류가 발생했습니다.")
+
+    # 사용자 삭제 섹션 추가
+    if len(st.session_state.users) > 0:
+        st.subheader("사용자 삭제")
+        # 관리자 계정(zetooo1972@gmail.com)을 제외한 사용자 목록
+        delete_email = st.selectbox(
+            "삭제할 사용자 선택", 
+            options=st.session_state.users[
+                st.session_state.users['이메일'] != 'zetooo1972@gmail.com'
+            ]['이메일'].tolist()
+        )
+        
+        if st.button("선택한 사용자 삭제"):
+            if delete_email:
+                # 관리자 계정은 삭제 불가
+                if delete_email == 'zetooo1972@gmail.com':
+                    st.error("관리자 계정은 삭제할 수 없습니다.")
+                else:
+                    # 선택한 사용자 삭제
+                    st.session_state.users = st.session_state.users[
+                        st.session_state.users['이메일'] != delete_email
+                    ]
+                    # 구글 시트에 백업
+                    if backup_users_to_sheets():
+                        st.success(f"사용자 {delete_email}가 삭제되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("사용자 삭제 중 오류가 발생했습니다.")
 
 def show_daily_report():
     st.title("📅 일간 리포트")
