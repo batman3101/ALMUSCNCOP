@@ -200,6 +200,12 @@ def sync_production_with_sheets():
         # 날짜 데이터 변환
         production_df['날짜'] = pd.to_datetime(production_df['날짜']).dt.strftime('%Y-%m-%d')
         
+        # 작업자 이름을 사번으로 변환
+        if len(st.session_state.workers) > 0:
+            worker_ids = st.session_state.workers.set_index('이름')['사번'].to_dict()
+            production_df['작업자명'] = production_df['작업자'].copy()  # 원래 이름 보존
+            production_df['작업자'] = production_df['작업자'].map(worker_ids)
+        
         # 세션 스테이트 업데이트
         st.session_state.daily_records = production_df
         return True
@@ -207,6 +213,14 @@ def sync_production_with_sheets():
     except Exception as e:
         st.error(f"생산 데이터 동기화 중 오류 발생: {str(e)}")
         return False
+
+def get_worker_name(worker_id):
+    """작업자 사번으로 이름 조회"""
+    if len(st.session_state.workers) > 0:
+        worker = st.session_state.workers[st.session_state.workers['사번'] == worker_id]
+        if len(worker) > 0:
+            return worker.iloc[0]['이름']
+    return None
 
 def backup_production_to_sheets():
     try:
