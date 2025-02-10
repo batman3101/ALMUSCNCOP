@@ -169,7 +169,6 @@ def sync_production_with_sheets():
     """구글 시트에서 생산 데이터 동기화"""
     try:
         sheets = init_google_sheets()
-        
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
             range='production!A2:H'
@@ -177,11 +176,9 @@ def sync_production_with_sheets():
         
         values = result.get('values', [])
         if values:
-            # 구글 시트 데이터를 DataFrame으로 변환
-            columns = ['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+            columns = ['날짜', '작업자', '라인번호', '모델차수', 
+                      '목표수량', '생산수량', '불량수량', '특이사항']
             production_df = pd.DataFrame(values, columns=columns)
-            
-            # 세션 스테이트 업데이트
             st.session_state.daily_records = production_df
             return True
         return False
@@ -1472,24 +1469,25 @@ def backup_users_to_sheets():
 
 def check_duplicate_records():
     """중복 데이터 검사"""
-    if len(st.session_state.daily_records) > 0:
-        duplicates_found = False
-        for worker_id in st.session_state.daily_records['작업자'].unique():
-            # 각 작업자별로 가장 최근 기록을 제외한 중복 기록 찾기
-            worker_records = st.session_state.daily_records[
-                st.session_state.daily_records['작업자'] == worker_id
-            ]
-            
-            if len(worker_records) > 1:
-                # 가장 최근 기록을 제외한 중복 기록 삭제
-                duplicate_indices = worker_records.index[:-1]
-                st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
-                duplicates_found = True
+    if len(st.session_state.daily_records) == 0:
+        return False
         
-        return duplicates_found
-    return False
+    duplicates_found = False
+    for worker_id in st.session_state.daily_records['작업자'].unique():
+        worker_records = st.session_state.daily_records[
+            st.session_state.daily_records['작업자'] == worker_id
+        ]
+        
+        if len(worker_records) > 1:
+            duplicate_indices = worker_records.index[:-1]
+            st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
+            duplicates_found = True
+    
+    return duplicates_found
 
-def update_production_record(edit_date, selected_record, line_number, model, target_qty, prod_qty, defect_qty, note):
+def update_production_record(edit_date, selected_record, line_number, model, 
+                           target_qty, prod_qty, defect_qty, note):
+    """생산 기록 업데이트"""
     try:
         mask = (
             (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
