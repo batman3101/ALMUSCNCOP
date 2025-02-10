@@ -1102,14 +1102,14 @@ def show_yearly_report():
 def show_user_management():
     st.title("👤 사용자 관리")
     
+    # 사용자 데이터 동기화
+    sync_users_with_sheets()
+    
     # 기존 사용자 목록 표시
     if len(st.session_state.users) > 0:
         st.subheader("등록된 사용자 목록")
-        # 비밀번호 컬럼을 제외하고 표시하고 STT 컬럼 추가
         display_users = st.session_state.users[['이메일', '이름', '역할']].copy()
-        # 인덱스를 1부터 시작하는 STT 컬럼으로 변환
         display_users.insert(0, 'STT', range(1, len(display_users) + 1))
-        # STT를 01, 02 형식으로 변환
         display_users['STT'] = display_users['STT'].apply(lambda x: f"{x:02d}")
         st.dataframe(display_users, hide_index=True)
     
@@ -1124,12 +1124,10 @@ def show_user_management():
         submitted = st.form_submit_button("저장")
         
         if submitted:
-            # 이메일 중복 체크
             if email in st.session_state.users['이메일'].values:
                 st.error("이미 등록된 이메일입니다.")
                 return
             
-            # 입력값 검증
             if not email or not password or not name:
                 st.error("모든 필드를 입력해주세요.")
                 return
@@ -1146,29 +1144,13 @@ def show_user_management():
             })
             
             st.session_state.users = pd.concat([st.session_state.users, new_user], ignore_index=True)
-            st.success(f"사용자 {email}가 등록되었습니다.")
-            st.rerun()
-    
-    # 사용자 삭제 섹션
-    if len(st.session_state.users) > 0:
-        st.subheader("사용자 삭제")
-        delete_email = st.selectbox(
-            "삭제할 사용자 선택", 
-            options=st.session_state.users[st.session_state.users['이메일'] != 'zetooo1972@gmail.com']['이메일'].tolist()
-        )
-        
-        if st.button("선택한 사용자 삭제"):
-            if delete_email:
-                # 관리자 계정은 삭제 불가
-                if delete_email == 'zetooo1972@gmail.com':
-                    st.error("관리자 계정은 삭제할 수 없습니다.")
-                else:
-                    # 선택한 사용자 삭제
-                    st.session_state.users = st.session_state.users[
-                        st.session_state.users['이메일'] != delete_email
-                    ]
-                    st.success(f"사용자 {delete_email}가 삭제되었습니다.")
-                    st.rerun()
+            
+            # 구글 시트에 백업
+            if backup_users_to_sheets():
+                st.success(f"사용자 {email}가 등록되었습니다.")
+                st.rerun()
+            else:
+                st.error("사용자 등록 중 오류가 발생했습니다.")
 
 def show_daily_report():
     st.title("📅 일간 리포트")
@@ -1351,6 +1333,62 @@ def sync_models_with_sheets():
         return False
     except Exception as e:
         st.error(f"모델차수 데이터 동기화 중 오류 발생: {str(e)}")
+        return False
+
+def sync_users_with_sheets():
+    """구글 시트에서 사용자 데이터 동기화"""
+    try:
+        sheets = init_google_sheets()
+        
+        # 구글 시트에서 사용자 데이터 읽기
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A2:D'  # A2부터 D열까지 (이메일, 비밀번호, 이름, 역할)
+        ).execute()
+        
+        values = result.get('values', [])
+        if values:
+            # 구글 시트 데이터를 DataFrame으로 변환
+            users_df = pd.DataFrame(values, columns=['이메일', '비밀번호', '이름', '역할'])
+            # 세션 스테이트 업데이트
+            st.session_state.users = users_df
+            return True
+        return False
+    except Exception as e:
+        st.error(f"사용자 데이터 동기화 중 오류 발생: {str(e)}")
+        return False
+
+def backup_users_to_sheets():
+    """사용자 데이터를 구글 시트에 백업"""
+    try:
+        if len(st.session_state.users) > 0:
+            sheets = init_google_sheets()
+            
+            # DataFrame을 리스트로 변환
+            values = [st.session_state.users.columns.tolist()] + st.session_state.users.values.tolist()
+            
+            # 기존 데이터 삭제
+            sheets.values().clear(
+                spreadsheetId=SPREADSHEET_ID,
+                range='users!A1:D'
+            ).execute()
+            
+            # 새 데이터 쓰기
+            body = {
+                'values': values
+            }
+            
+            sheets.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range='users!A1',
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+            
+            return True
+        return False
+    except Exception as e:
+        st.error(f"사용자 데이터 백업 중 오류 발생: {str(e)}")
         return False
 
 if __name__ == "__main__":
