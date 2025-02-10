@@ -37,21 +37,10 @@ if 'models' not in st.session_state:
 
 def init_google_sheets():
     try:
-        # Streamlit Cloud 환경에서는 secrets에서 서비스 계정 정보를 가져옴
-        if hasattr(st.secrets, "gcp_service_account"):
-            credentials = service_account.Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"],
-                scopes=SCOPES
-            )
-        # 로컬 환경에서는 파일에서 서비스 계정 정보를 가져옴
-        else:
-            with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
-                service_account_info = json.load(f)
-            credentials = service_account.Credentials.from_service_account_info(
-                service_account_info,
-                scopes=SCOPES
-            )
-        
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=SCOPES
+        )
         service = build('sheets', 'v4', credentials=credentials)
         return service.spreadsheets()
     except Exception as e:
@@ -126,11 +115,7 @@ def sync_workers_with_sheets():
 
 def print_service_account_email():
     try:
-        if hasattr(st.secrets, "gcp_service_account"):
-            service_account_info = st.secrets["gcp_service_account"]
-        else:
-            with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
-                service_account_info = json.load(f)
+        service_account_info = st.secrets["gcp_service_account"]
         st.info(f"구글 시트 공유 설정에 추가할 이메일: {service_account_info['client_email']}")
     except Exception as e:
         st.error(f"서비스 계정 정보 읽기 중 오류 발생: {str(e)}")
