@@ -872,80 +872,75 @@ def show_monthly_report():
         selected_worker = st.selectbox("작업자 선택", options=all_workers)
         
         # 선택된 월의 데이터 필터링
-        month_str = f"{year}-{month:02d}"
-        monthly_data = st.session_state.daily_records[
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == month_str
-        ]
+        date_mask = (
+            pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year
+        ) & (
+            pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month
+        )
         
-        # 선택된 작업자에 대한 필터링
-        if selected_worker != '전체':
-            worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
-            monthly_data = monthly_data[monthly_data['작업자'] == worker_id]
+        monthly_data = st.session_state.daily_records[date_mask].copy()
         
         if len(monthly_data) > 0:
-            # 이전 월 데이터 가져오기
-            current_date = pd.to_datetime(month_str + '-01')
-            previous_date = (current_date - pd.DateOffset(months=1))
-            previous_month = previous_date.strftime('%Y-%m')
+            if selected_worker != '전체':
+                monthly_data = monthly_data[monthly_data['작업자'] == selected_worker]
             
-            previous_data = st.session_state.daily_records[
-                pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == previous_month
-            ].copy()  # 복사본 생성
-            
-            # 최우수 KPI 대시보드 표시
-            if len(previous_data) > 0:
-                show_best_kpi_dashboard(monthly_data, previous_data, "월간")
-            else:
-                show_best_kpi_dashboard(monthly_data, None, "월간")
-            
-            st.divider()  # 구분선 추가
-            
-            st.subheader(f"기간: {month_str}")
-            
-            # KPI 계산
-            achievement_rate, defect_rate, efficiency_rate = calculate_kpi(monthly_data)
-            
-            st.divider()  # 구분선 추가
-            
-            # KPI 지표 표시
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("월간 생산목표달성률", f"{achievement_rate:.2f}%")
-            with col2:
-                st.metric("월간 불량률", f"{defect_rate:.2f}%")
-            with col3:
-                st.metric("월간 작업효율", f"{efficiency_rate:.2f}%")
-            
-            st.divider()  # 구분선 추가
-            
-            # 작업자별 실적 표시
-            st.subheader("작업자별 실적")
-            
-            # 작업자 이름 매핑
-            worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-            monthly_data['작업자명'] = monthly_data['작업자'].map(worker_names)
-            
-            # 작업자별 집계 데이터 계산
-            worker_summary = monthly_data.groupby('작업자명').agg({
-                '목표수량': 'sum',
+            # 작업자별 집계
+            worker_stats = monthly_data.groupby('작업자').agg({
                 '생산수량': 'sum',
-                '불량수량': 'sum'
+                '불량수량': 'sum',
+                '목표수량': 'sum'
             }).reset_index()
             
-            # 작업자별 KPI 계산
-            worker_summary = calculate_worker_kpi(worker_summary)
+            # 달성률 계산
+            worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
+            worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
+            
+            # 컬럼 순서 변경
+            worker_stats = worker_stats[[
+                '작업자', '목표수량', '생산수량', '불량수량', '달성률', '불량률'
+            ]]
             
             # 데이터 표시
-            st.dataframe(worker_summary, hide_index=True)
+            st.subheader(f"{year}년 {month}월 작업자별 실적")
+            st.dataframe(
+                worker_stats,
+                column_config={
+                    '달성률': st.column_config.NumberColumn(
+                        '달성률(%)',
+                        format="%.1f%%"
+                    ),
+                    '불량률': st.column_config.NumberColumn(
+                        '불량률(%)',
+                        format="%.1f%%"
+                    )
+                },
+                hide_index=True
+            )
             
-            st.divider()  # 구분선 추가
-            
-            # 작업자별 생산량 차트로 변경
-            fig = create_production_chart(worker_summary, '작업자명', '작업자별 생산 현황')
-            st.plotly_chart(fig)
-            
+            # 차트 표시
+            if len(worker_stats) > 0:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    name='생산수량',
+                    x=worker_stats['작업자'],
+                    y=worker_stats['생산수량'],
+                    text=worker_stats['생산수량'],
+                    textposition='auto',
+                ))
+                fig.add_trace(go.Bar(
+                    name='불량수량',
+                    x=worker_stats['작업자'],
+                    y=worker_stats['불량수량'],
+                    text=worker_stats['불량수량'],
+                    textposition='auto',
+                ))
+                fig.update_layout(
+                    title=f'{year}년 {month}월 작업자별 생산/불량 현황',
+                    barmode='group'
+                )
+                st.plotly_chart(fig)
         else:
-            st.info(f"{month_str} 월의 생산 데이터가 없습니다.")
+            st.info(f"{year}년 {month}월의 생산 데이터가 없습니다.")
     else:
         st.info("등록된 생산 실적이 없습니다.")
 
@@ -1402,6 +1397,103 @@ def update_production_record(
     except Exception as e:
         st.error(f"생산 기록 업데이트 중 오류 발생: {str(e)}")
         return False
+
+def show_worker_report():
+    st.title("👥 작업자별 실적")
+    
+    if len(st.session_state.daily_records) > 0:
+        # 날짜 필터 추가
+        col1, col2 = st.columns(2)
+        with col1:
+            current_date = datetime.now()
+            selected_year = st.selectbox(
+                "연도 선택",
+                options=range(2024, 2020, -1),
+                index=0
+            )
+        with col2:
+            selected_month = st.selectbox(
+                "월 선택",
+                options=range(1, 13),
+                index=current_date.month-1)
+        
+        # 작업자 선택 드롭다운
+        worker_names = st.session_state.workers['이름'].unique().tolist()
+        all_workers = ['전체'] + worker_names
+        selected_worker = st.selectbox("작업자 선택", options=all_workers)
+        
+        # 선택된 연월의 데이터 필터링
+        date_mask = (
+            pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == selected_year
+        ) & (
+            pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == selected_month
+        )
+        
+        monthly_data = st.session_state.daily_records[date_mask].copy()
+        
+        if len(monthly_data) > 0:
+            if selected_worker != '전체':
+                monthly_data = monthly_data[monthly_data['작업자'] == selected_worker]
+            
+            # 작업자별 집계
+            worker_stats = monthly_data.groupby('작업자').agg({
+                '생산수량': 'sum',
+                '불량수량': 'sum',
+                '목표수량': 'sum'
+            }).reset_index()
+            
+            # 달성률 계산
+            worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
+            worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
+            
+            # 컬럼 순서 변경
+            worker_stats = worker_stats[[
+                '작업자', '목표수량', '생산수량', '불량수량', '달성률', '불량률'
+            ]]
+            
+            # 데이터 표시
+            st.subheader(f"{selected_year}년 {selected_month}월 작업자별 실적")
+            st.dataframe(
+                worker_stats,
+                column_config={
+                    '달성률': st.column_config.NumberColumn(
+                        '달성률(%)',
+                        format="%.1f%%"
+                    ),
+                    '불량률': st.column_config.NumberColumn(
+                        '불량률(%)',
+                        format="%.1f%%"
+                    )
+                },
+                hide_index=True
+            )
+            
+            # 차트 표시
+            if len(worker_stats) > 0:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    name='생산수량',
+                    x=worker_stats['작업자'],
+                    y=worker_stats['생산수량'],
+                    text=worker_stats['생산수량'],
+                    textposition='auto',
+                ))
+                fig.add_trace(go.Bar(
+                    name='불량수량',
+                    x=worker_stats['작업자'],
+                    y=worker_stats['불량수량'],
+                    text=worker_stats['불량수량'],
+                    textposition='auto',
+                ))
+                fig.update_layout(
+                    title=f'{selected_year}년 {selected_month}월 작업자별 생산/불량 현황',
+                    barmode='group'
+                )
+                st.plotly_chart(fig)
+        else:
+            st.info(f"{selected_year}년 {selected_month}월의 생산 데이터가 없습니다.")
+    else:
+        st.info("등록된 생산 실적이 없습니다.")
 
 if __name__ == "__main__":
     main()
