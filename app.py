@@ -174,59 +174,74 @@ def sync_production_with_sheets():
         ).execute()
         
         values = result.get('values', [])
-        if values:
-            columns = [
-                '날짜', '작업자', '라인번호', '모델차수',
-                '목표수량', '생산수량', '불량수량', '특이사항'
-            ]
-            production_df = pd.DataFrame(values, columns=columns)
-            st.session_state.daily_records = production_df
-            return True
-        return False
+        if not values:
+            return False
+            
+        # 데이터 정리 및 변환
+        formatted_values = []
+        for row in values:
+            # 부족한 컬럼을 빈 문자열로 채움
+            while len(row) < 8:
+                row.append('')
+            formatted_values.append(row[:8])  # 8개 컬럼만 사용
+        
+        # DataFrame 생성
+        columns = [
+            '날짜', '작업자', '라인번호', '모델차수',
+            '목표수량', '생산수량', '불량수량', '특이사항'
+        ]
+        production_df = pd.DataFrame(formatted_values, columns=columns)
+        
+        # 숫자 데이터 변환
+        numeric_columns = ['목표수량', '생산수량', '불량수량']
+        for col in numeric_columns:
+            production_df[col] = pd.to_numeric(production_df[col], errors='coerce').fillna(0)
+        
+        # 날짜 데이터 변환
+        production_df['날짜'] = pd.to_datetime(production_df['날짜']).dt.strftime('%Y-%m-%d')
+        
+        # 세션 스테이트 업데이트
+        st.session_state.daily_records = production_df
+        return True
+        
     except Exception as e:
         st.error(f"생산 데이터 동기화 중 오류 발생: {str(e)}")
         return False
 
 def backup_production_to_sheets():
-    """생산 데이터를 구글 시트에 백업"""
     try:
-        if len(st.session_state.daily_records) > 0:
-            sheets = init_google_sheets()
+        if len(st.session_state.daily_records) == 0:
+            return False
             
-            # 백업할 데이터 준비
-            backup_data = st.session_state.daily_records.copy()
-            
-            # 날짜 형식 변환 (datetime을 문자열로)
-            backup_data['날짜'] = pd.to_datetime(backup_data['날짜']).dt.strftime('%Y-%m-%d')
-            
-            # 작업자 사번을 이름으로 변환
-            worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-            backup_data['작업자'] = backup_data['작업자'].map(worker_names)
-            
-            # DataFrame을 리스트로 변환
-            values = [backup_data.columns.tolist()]
-            values.extend(backup_data.values.tolist())
-            
-            # 기존 데이터 삭제
-            sheets.values().clear(
-                spreadsheetId=SPREADSHEET_ID,
-                range='production!A1:H'
-            ).execute()
-            
-            # 새 데이터 쓰기
-            body = {
-                'values': values
-            }
-            
-            sheets.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range='production!A1',
-                valueInputOption='RAW',
-                body=body
-            ).execute()
-            
-            return True
-        return False
+        sheets = init_google_sheets()
+        
+        # 데이터 준비
+        backup_data = st.session_state.daily_records.copy()
+        
+        # DataFrame을 리스트로 변환
+        values = [
+            ['날짜', '작업자', '라인번호', '모델차수', 
+             '목표수량', '생산수량', '불량수량', '특이사항']
+        ]
+        values.extend(backup_data.values.tolist())
+        
+        # 기존 데이터 삭제
+        sheets.values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range='production!A1:H'
+        ).execute()
+        
+        # 새 데이터 쓰기
+        body = {'values': values}
+        sheets.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range='production!A1',
+            valueInputOption='RAW',
+            body=body
+        ).execute()
+        
+        return True
+        
     except Exception as e:
         st.error(f"생산 데이터 백업 중 오류 발생: {str(e)}")
         return False
@@ -797,10 +812,7 @@ def show_daily_production():
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
                             (st.session_state.daily_records['작업자'] == selected_record['작업자']))
-                        mask = (
-                            (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
-                            (st.session_state.daily_records['작업자'] == selected_record['작업자'])
-                        )
+                        # 괄호 제거
                         st.session_state.daily_records.loc[mask, '라인번호'] = line_number
                         st.session_state.daily_records.loc[mask, '모델차수'] = model
                         st.session_state.daily_records.loc[mask, '목표수량'] = target_qty
@@ -863,8 +875,6 @@ def show_daily_production():
                         
                         # 중복 데이터 중 마지막 항목을 제외한 나머지 삭제
                         mask = (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) & (st.session_state.daily_records['작업자'] == worker_id)
-                            # 이 줄은 위의 mask 정의에 이미 포함되어 있으므로 삭제
-                            # 중복된 조건문 제거
                         duplicate_indices = st.session_state.daily_records[mask].index[:-1]
                         
                         # 데이터 삭제
