@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.env
+.venv
+env/
+venv/
+.streamlit/
+*.json
+CNC OP KPI.code-workspace
