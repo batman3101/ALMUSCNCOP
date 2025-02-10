@@ -127,28 +127,36 @@ streamlit run app.py
 git init
 
 # .gitignore 파일 생성
-echo "# Python
+echo "# 보안 파일
+cnc-op-kpi-management-d552546430e8.json
+
+# 작업공간 설정
+CNC OP KPI.code-workspace
+
+# 가상환경
+.venv/
 __pycache__/
+
+# Python
 *.py[cod]
 *$py.class
 .env
-.venv
 env/
 venv/
-.streamlit/
-*.json" > .gitignore
+.streamlit/" > .gitignore
 ```
 
 2. GitHub 저장소 생성:
 - GitHub.com에서 새 저장소 생성
-- 저장소 이름: `ALMUSCNCOPKPI`
+- 저장소 이름: `ALMUSCNCOP`
 - 설명 추가 (선택사항)
 - Public/Private 선택
 
 3. 로컬 저장소와 GitHub 연결:
 ```bash
 # 원격 저장소 추가
-git remote add origin https://github.com/[사용자명]/ALMUSCNCOPKPI.git
+git remote add origin https://github.com/batman3101/ALMUSCNCOP.git
+
 
 
 # 파일 스테이징

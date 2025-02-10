@@ -1,11 +1,17 @@
-# Python
+# 보안 파일
+cnc-op-kpi-management-d552546430e8.json
+
+# 작업공간 설정
+CNC OP KPI.code-workspace
+
+# 가상환경
+.venv/
 __pycache__/
+
+# Python
 *.py[cod]
 *.class
 .env
-.venv
 env/
 venv/
 .streamlit/
-*.json
-CNC OP KPI.code-workspace
