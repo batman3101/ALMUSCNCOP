@@ -28,7 +28,7 @@ if 'daily_records' not in st.session_state:
     )
 if 'users' not in st.session_state:
     st.session_state.users = pd.DataFrame(
-        columns=['이메일', '비밀번호', '이름', '역할']  # '이름' 컬럼 추가
+        columns=['이메일', '비밀번호', '이름', '권한']  # '이름' 컬럼 추가
     )
 if 'clear_users' not in st.session_state:
     st.session_state.clear_users = True
@@ -71,7 +71,7 @@ def show_login():
             if len(user) > 0 and bcrypt.checkpw(password.encode('utf-8'), 
                                                user.iloc[0]['비밀번호'].encode('utf-8')):
                 st.session_state.authenticated = True
-                st.session_state.user_role = user.iloc[0]['역할']
+                st.session_state.user_role = user.iloc[0]['권한']
                 st.success("로그인 성공!")
                 st.rerun()
             else:
@@ -91,7 +91,7 @@ def init_admin_account():
             '이메일': [admin_email],
             '비밀번호': [hashed_password.decode('utf-8')],
             '이름': [admin_name],
-            '역할': ['admin']
+            '권한': ['admin']
         })
         
         # users DataFrame을 새로 생성
@@ -1108,7 +1108,8 @@ def show_user_management():
     # 기존 사용자 목록 표시
     if len(st.session_state.users) > 0:
         st.subheader("등록된 사용자 목록")
-        display_users = st.session_state.users[['이메일', '이름', '역할']].copy()
+        # 표시할 컬럼 선택 및 복사
+        display_users = st.session_state.users[['이메일', '이름', '권한']].copy()
         display_users.insert(0, 'STT', range(1, len(display_users) + 1))
         display_users['STT'] = display_users['STT'].apply(lambda x: f"{x:02d}")
         st.dataframe(display_users, hide_index=True)
@@ -1140,7 +1141,7 @@ def show_user_management():
                 '이메일': [email],
                 '비밀번호': [hashed_password.decode('utf-8')],
                 '이름': [name],
-                '역할': [role]
+                '권한': [role]
             })
             
             st.session_state.users = pd.concat([st.session_state.users, new_user], ignore_index=True)
