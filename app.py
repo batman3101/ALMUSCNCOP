@@ -704,20 +704,18 @@ def show_daily_production():
         st.subheader("신규 생산 실적 입력")
     with st.form("daily_production_form"):
         date = st.date_input("작업일자", datetime.now())
-            
-            # 작업자 선택 드롭다운
-            if len(st.session_state.workers) > 0:
-                worker_options = st.session_state.workers.set_index('사번')['이름'].to_dict()
-                worker_name = st.selectbox(
-                    "작업자",
-                    options=list(worker_options.values()),
+        # 작업자 선택 드롭다운
+        if len(st.session_state.workers) > 0:
+            worker_options = st.session_state.workers.set_index('사번')['이름'].to_dict()
+            worker_name = st.selectbox(
+                "작업자",
+                options=list(worker_options.values()),
                     format_func=lambda x: x
                 )
                 worker_id = [k for k, v in worker_options.items() if v == worker_name][0]
                 
                 # 선택된 작업자의 라인번호 가져오기
                 worker_data = st.session_state.workers[st.session_state.workers['사번'] == worker_id].iloc[0]
-            
             # 모델차수 선택 드롭다운
             if len(st.session_state.models) > 0:
                 # MODEL과 PROCESS를 조합하여 모델차수 옵션 생성
@@ -725,11 +723,11 @@ def show_daily_production():
                                for _, row in st.session_state.models.iterrows()]
                 model = st.selectbox("모델차수", options=sorted(set(model_options)))
             else:
-            model = st.text_input("모델차수")
+                model = st.text_input("모델차수")
             
-        target_qty = st.number_input("목표수량", min_value=0)
-        produced_qty = st.number_input("생산수량", min_value=0)
-        defect_qty = st.number_input("불량수량", min_value=0)
+            target_qty = st.number_input("목표수량", min_value=0)
+            produced_qty = st.number_input("생산수량", min_value=0)
+            defect_qty = st.number_input("불량수량", min_value=0)
         notes = st.text_area("특이사항")
         
         submitted = st.form_submit_button("저장")
@@ -738,11 +736,11 @@ def show_daily_production():
                 # 날짜를 문자열로 변환
                 date_str = date.strftime('%Y-%m-%d')
                 
-            new_record = pd.DataFrame({
+                new_record = pd.DataFrame({
                     '날짜': [date_str],
                     '작업자': [worker_name],  # 작업자 이름 저장
                     '라인번호': [worker_data['라인번호']],
-                '모델차수': [model],
+                    '모델차수': [model],
                 '목표수량': [target_qty],
                 '생산수량': [produced_qty],
                 '불량수량': [defect_qty],
@@ -1039,10 +1037,10 @@ def show_yearly_report():
             '불량수량': 'sum'
         }).reset_index()
         
-            fig = create_production_chart(monthly_trend, '날짜', '월별 생산 현황')
-            st.plotly_chart(fig)
-            
-        else:
+        fig = create_production_chart(monthly_trend, '날짜', '월별 생산 현황')
+        st.plotly_chart(fig)
+        
+        if len(yearly_data) == 0:
             st.info(f"{year}년의 생산 데이터가 없습니다.")
     else:
         st.info("등록된 생산 실적이 없습니다.")
@@ -1437,52 +1435,48 @@ def show_worker_report():
         # 날짜 필터 추가
                 col1, col2 = st.columns(2)
                 with col1:
-            current_date = datetime.now()
-            selected_year = st.selectbox(
-                "연도 선택",
-                options=range(2024, 2020, -1),
-                index=0
-            )
+                    current_date = datetime.now()
+                    selected_year = st.selectbox(
+                        "연도 선택",
+                        options=range(2024, 2020, -1),
+                        index=0
+                    )
                 with col2:
-            selected_month = st.selectbox(
-                "월 선택",
-                options=range(1, 13),
-                index=current_date.month-1)
-        
-        # 작업자 선택 드롭다운
-        worker_names = st.session_state.workers['이름'].unique().tolist()
-        all_workers = ['전체'] + worker_names
-        selected_worker = st.selectbox("작업자 선택", options=all_workers)
-        
-        # 선택된 연월의 데이터 필터링
-        date_mask = (
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == selected_year
-        ) & (
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == selected_month
-        )
-        
-        monthly_data = st.session_state.daily_records[date_mask].copy()
-        
-        if len(monthly_data) > 0:
-            if selected_worker != '전체':
-                monthly_data = monthly_data[monthly_data['작업자'] == selected_worker]
-            
-            # 작업자별 집계
-            worker_stats = monthly_data.groupby('작업자').agg({
-                '생산수량': 'sum',
-                '불량수량': 'sum',
-                '목표수량': 'sum'
-            }).reset_index()
-            
+                    selected_month = st.selectbox(
+                        "월 선택",
+                        options=range(1, 13),
+                        index=current_date.month-1
+                    )
+                # 작업자 선택 드롭다운
+                worker_names = st.session_state.workers['이름'].unique().tolist()
+                all_workers = ['전체'] + worker_names
+                selected_worker = st.selectbox("작업자 선택", options=all_workers)
+                # 선택된 연월의 데이터 필터링
+                date_mask = (
+                    pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == selected_year
+                ) & (
+                    pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == selected_month
+                )
+                
+                monthly_data = st.session_state.daily_records[date_mask].copy()
+                
+                if len(monthly_data) > 0:
+                    if selected_worker != '전체':
+                        monthly_data = monthly_data[monthly_data['작업자'] == selected_worker]
+                    # 작업자별 집계
+                    worker_stats = monthly_data.groupby('작업자').agg({
+                        '생산수량': 'sum',
+                        '불량수량': 'sum', 
+                        '목표수량': 'sum'
+                    }).reset_index()
             # 달성률 계산
-            worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
-            worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
-            
-            # 컬럼 순서 변경
-            worker_stats = worker_stats[[
+                worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
+                worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
+                
+                # 컬럼 순서 변경
+                worker_stats = worker_stats[[
                 '작업자', '목표수량', '생산수량', '불량수량', '달성률', '불량률'
             ]]
-            
             # 데이터 표시
             st.subheader(f"{selected_year}년 {selected_month}월 작업자별 실적")
             st.dataframe(
@@ -1523,8 +1517,8 @@ def show_worker_report():
             st.plotly_chart(fig)
         else:
             st.info(f"{selected_year}년 {selected_month}월의 생산 데이터가 없습니다.")
-    else:
-        st.info("등록된 생산 실적이 없습니다.")
+        else:
+            st.info("등록된 생산 실적이 없습니다.")
 
 if __name__ == "__main__":
     main()
