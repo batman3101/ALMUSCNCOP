@@ -37,6 +37,7 @@ if 'models' not in st.session_state:
 
 def init_google_sheets():
     try:
+        # Streamlit Cloud의 secrets에서 서비스 계정 정보 가져오기
         credentials = service_account.Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
             scopes=SCOPES
