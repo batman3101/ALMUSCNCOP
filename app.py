@@ -31,7 +31,7 @@ if 'users' not in st.session_state:
         columns=['이메일', '비밀번호', '이름', '권한']  # '이름' 컬럼 추가
     )
 if 'clear_users' not in st.session_state:
-    st.session_state.clear_users = True
+    st.session_state.clear_users = False
 if 'models' not in st.session_state:
     st.session_state.models = pd.DataFrame(columns=['STT', 'MODEL', 'PROCESS'])
 
@@ -457,35 +457,44 @@ def main():
         layout="wide"
     )
 
-    # 초기 데이터 로드
+    # 세션 상태 초기화
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'user_role' not in st.session_state:
         st.session_state.user_role = None
-    if 'workers' not in st.session_state:
-        st.session_state.workers = pd.DataFrame(columns=['STT', '사번', '이름', '부서', '라인번호'])
-    if 'daily_records' not in st.session_state:
-        st.session_state.daily_records = pd.DataFrame(
-            columns=['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
-        )
     if 'users' not in st.session_state:
         st.session_state.users = pd.DataFrame(
             columns=['이메일', '비밀번호', '이름', '권한']
         )
     if 'clear_users' not in st.session_state:
-        st.session_state.clear_users = True
-    if 'models' not in st.session_state:
-        st.session_state.models = pd.DataFrame(columns=['STT', 'MODEL', 'PROCESS'])
-
-    # 데이터 동기화
-    sync_workers_with_sheets()  # 작업자 데이터 동기화
-    sync_production_with_sheets()  # 생산 데이터 동기화
-    sync_models_with_sheets()  # 모델 데이터 동기화
+        st.session_state.clear_users = False  # True에서 False로 변경
     
-    # 사용자 데이터 초기화 및 동기화
+    # 먼저 사용자 데이터 동기화
+    sync_users_with_sheets()
+    
+    # 관리자 계정이 없을 때만 초기화
     if len(st.session_state.users) == 0:
-        init_admin_account()  # 관리자 계정이 없으면 생성
-    sync_users_with_sheets()  # 사용자 데이터 동기화
+        init_admin_account()
+        sync_users_with_sheets()  # 관리자 계정 생성 후 다시 동기화
+    
+    # 나머지 데이터 초기화
+    if 'workers' not in st.session_state:
+        st.session_state.workers = pd.DataFrame(
+            columns=['STT', '사번', '이름', '부서', '라인번호']
+        )
+    if 'daily_records' not in st.session_state:
+        st.session_state.daily_records = pd.DataFrame(
+            columns=['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+        )
+    if 'models' not in st.session_state:
+        st.session_state.models = pd.DataFrame(
+            columns=['STT', 'MODEL', 'PROCESS']
+        )
+
+    # 나머지 데이터 동기화
+    sync_workers_with_sheets()
+    sync_production_with_sheets()
+    sync_models_with_sheets()
 
     # 인증 상태에 따른 화면 표시
     if not st.session_state.authenticated:
@@ -710,18 +719,6 @@ def show_daily_production():
                 
                 # 선택된 작업자의 라인번호 가져오기
                 worker_data = st.session_state.workers[st.session_state.workers['사번'] == worker_id].iloc[0]
-                
-                # 라인번호 선택
-                all_line_numbers = st.session_state.workers['라인번호'].unique().tolist()
-                line_number = st.selectbox(
-                    "라인번호",
-                    options=all_line_numbers,
-                    index=all_line_numbers.index(worker_data['라인번호']) if worker_data['라인번호'] in all_line_numbers else 0
-                )
-            else:
-                worker_name = st.selectbox("작업자", options=[])
-                worker_id = None
-                line_number = st.text_input("라인번호")
             
             # 모델차수 선택 드롭다운
             if len(st.session_state.models) > 0:
@@ -746,7 +743,7 @@ def show_daily_production():
                 new_record = pd.DataFrame({
                     '날짜': [date_str],  # 문자열 형식으로 저장
                     '작업자': [worker_id],
-                    '라인번호': [line_number],
+                    '라인번호': [worker_data['라인번호']],
                     '모델차수': [model],
                     '목표수량': [target_qty],
                     '생산수량': [produced_qty],
