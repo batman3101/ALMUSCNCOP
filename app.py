@@ -1343,13 +1343,13 @@ def sync_users_with_sheets():
         # 구글 시트에서 사용자 데이터 읽기
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='users!A2:D'  # A2부터 D열까지 (이메일, 비밀번호, 이름, 역할)
+            range='user!A2:D'  # A2부터 D열까지 (이메일, 비밀번호, 이름, 권한)
         ).execute()
         
         values = result.get('values', [])
         if values:
             # 구글 시트 데이터를 DataFrame으로 변환
-            users_df = pd.DataFrame(values, columns=['이메일', '비밀번호', '이름', '역할'])
+            users_df = pd.DataFrame(values, columns=['이메일', '비밀번호', '이름', '권한'])
             # 세션 스테이트 업데이트
             st.session_state.users = users_df
             return True
@@ -1365,12 +1365,13 @@ def backup_users_to_sheets():
             sheets = init_google_sheets()
             
             # DataFrame을 리스트로 변환
-            values = [st.session_state.users.columns.tolist()] + st.session_state.users.values.tolist()
+            values = [['이메일', '비밀번호', '이름', '권한']]  # 헤더 추가
+            values.extend(st.session_state.users.values.tolist())
             
             # 기존 데이터 삭제
             sheets.values().clear(
                 spreadsheetId=SPREADSHEET_ID,
-                range='users!A1:D'
+                range='user!A1:D'
             ).execute()
             
             # 새 데이터 쓰기
@@ -1380,7 +1381,7 @@ def backup_users_to_sheets():
             
             sheets.values().update(
                 spreadsheetId=SPREADSHEET_ID,
-                range='users!A1',
+                range='user!A1',
                 valueInputOption='RAW',
                 body=body
             ).execute()
