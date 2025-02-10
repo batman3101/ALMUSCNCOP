@@ -45,8 +45,10 @@ def init_google_sheets():
             )
         # 로컬 환경에서는 파일에서 서비스 계정 정보를 가져옴
         else:
-            credentials = service_account.Credentials.from_service_account_file(
-                'cnc-op-kpi-management-d552546430e8.json',
+            with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
+                service_account_info = json.load(f)
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info,
                 scopes=SCOPES
             )
         
@@ -123,9 +125,15 @@ def sync_workers_with_sheets():
         return False
 
 def print_service_account_email():
-    with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
-        service_account_info = json.load(f)
-        print(f"서비스 계정 이메일: {service_account_info['client_email']}")
+    try:
+        if hasattr(st.secrets, "gcp_service_account"):
+            service_account_info = st.secrets["gcp_service_account"]
+        else:
+            with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
+                service_account_info = json.load(f)
+        st.info(f"구글 시트 공유 설정에 추가할 이메일: {service_account_info['client_email']}")
+    except Exception as e:
+        st.error(f"서비스 계정 정보 읽기 중 오류 발생: {str(e)}")
 
 def sync_production_with_sheets():
     try:
@@ -829,9 +837,7 @@ def show_worker_registration():
     
     # 관리자 계정일 때만 서비스 계정 이메일 표시
     if st.session_state.user_role == 'admin':
-        with open('cnc-op-kpi-management-d552546430e8.json', 'r') as f:
-            service_account_info = json.load(f)
-            st.info(f"구글 시트 공유 설정에 추가할 이메일: {service_account_info['client_email']}")
+        print_service_account_email()
     
     # 구글 시트 동기화 버튼
     col1, col2 = st.columns([1, 3])
@@ -909,20 +915,24 @@ def show_monthly_report():
     st.title("📋 월간 리포트")
     
     if len(st.session_state.daily_records) > 0:
-        # 월 선택
-        month = st.selectbox(
-            "월 선택", 
-            options=pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m').unique()
-        )
+        # 날짜 선택
+        current_date = datetime.now()
+        year = st.selectbox("연도 선택", 
+                           options=range(current_date.year-2, current_date.year+1),
+                           index=2)
+        month = st.selectbox("월 선택", 
+                           options=range(1, 13),
+                           index=current_date.month-1)
         
         # 작업자 선택 드롭다운 추가
         worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
         all_workers = ['전체'] + list(worker_names.values())
         selected_worker = st.selectbox("작업자 선택", options=all_workers)
         
-        # 월간 데이터 필터링
+        # 선택된 월의 데이터 필터링
+        month_str = f"{year}-{month:02d}"
         monthly_data = st.session_state.daily_records[
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == month
+            pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == month_str
         ]
         
         # 선택된 작업자에 대한 필터링
@@ -931,15 +941,24 @@ def show_monthly_report():
             monthly_data = monthly_data[monthly_data['작업자'] == worker_id]
         
         if len(monthly_data) > 0:
-            # 이전 월 데이터 가져오기 및 KPI 대시보드 표시
-            current_date = pd.to_datetime(month + '-01')
-            previous_month = (current_date - pd.DateOffset(months=1)).strftime('%Y-%m')
-            ]
-            show_best_kpi_dashboard(monthly_data, previous_data, "월간")
+            # 이전 월 데이터 가져오기
+            current_date = pd.to_datetime(month_str + '-01')
+            previous_date = (current_date - pd.DateOffset(months=1))
+            previous_month = previous_date.strftime('%Y-%m')
+            
+            previous_data = st.session_state.daily_records[
+                pd.to_datetime(st.session_state.daily_records['날짜']).dt.strftime('%Y-%m') == previous_month
+            ].copy()  # 복사본 생성
+            
+            # 최우수 KPI 대시보드 표시
+            if len(previous_data) > 0:
+                show_best_kpi_dashboard(monthly_data, previous_data, "월간")
+            else:
+                show_best_kpi_dashboard(monthly_data, None, "월간")
             
             st.divider()  # 구분선 추가
             
-            st.subheader(f"기간: {month}")
+            st.subheader(f"기간: {month_str}")
             
             # KPI 계산
             achievement_rate, defect_rate, efficiency_rate = calculate_kpi(monthly_data)
@@ -984,7 +1003,7 @@ def show_monthly_report():
             st.plotly_chart(fig)
             
         else:
-            st.info(f"{month} 월의 생산 데이터가 없습니다.")
+            st.info(f"{month_str} 월의 생산 데이터가 없습니다.")
     else:
         st.info("등록된 생산 실적이 없습니다.")
 
