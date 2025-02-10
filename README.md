@@ -190,4 +190,4 @@ git checkout -b feature/new-feature
 # 작업 완료 후 main 브랜치로 병합
 git checkout main
 git merge feature/new-feature
-```
+```# ALMUSCNCOP
