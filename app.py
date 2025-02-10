@@ -177,34 +177,19 @@ def sync_production_with_sheets():
         if not values:
             return False
             
-        # 데이터 정리 및 변환
-        formatted_values = []
-        for row in values:
-            # 부족한 컬럼을 빈 문자열로 채움
-            while len(row) < 8:
-                row.append('')
-            formatted_values.append(row[:8])  # 8개 컬럼만 사용
-        
         # DataFrame 생성
-        columns = [
-            '날짜', '작업자', '라인번호', '모델차수',
-            '목표수량', '생산수량', '불량수량', '특이사항'
-        ]
-        production_df = pd.DataFrame(formatted_values, columns=columns)
+        columns = ['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+        production_df = pd.DataFrame(values, columns=columns)
+        
+        # 작업자 이름을 ID로 변환
+        if len(st.session_state.workers) > 0:
+            worker_ids = st.session_state.workers.set_index('이름')['사번'].to_dict()
+            production_df['작업자'] = production_df['작업자'].map(worker_ids)
         
         # 숫자 데이터 변환
         numeric_columns = ['목표수량', '생산수량', '불량수량']
         for col in numeric_columns:
             production_df[col] = pd.to_numeric(production_df[col], errors='coerce').fillna(0)
-        
-        # 날짜 데이터 변환
-        production_df['날짜'] = pd.to_datetime(production_df['날짜']).dt.strftime('%Y-%m-%d')
-        
-        # 작업자 이름을 사번으로 변환
-        if len(st.session_state.workers) > 0:
-            worker_ids = st.session_state.workers.set_index('이름')['사번'].to_dict()
-            production_df['작업자명'] = production_df['작업자'].copy()  # 원래 이름 보존
-            production_df['작업자'] = production_df['작업자'].map(worker_ids)
         
         # 세션 스테이트 업데이트
         st.session_state.daily_records = production_df
@@ -229,14 +214,19 @@ def backup_production_to_sheets():
             
         sheets = init_google_sheets()
         
-        # 데이터 준비
+        # 백업할 데이터 준비
         backup_data = st.session_state.daily_records.copy()
         
+        # 작업자 ID를 이름으로 변환
+        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+        backup_data['작업자'] = backup_data['작업자'].map(worker_names)
+        
+        # 필요한 컬럼만 선택
+        columns = ['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+        backup_data = backup_data[columns]
+        
         # DataFrame을 리스트로 변환
-        values = [
-            ['날짜', '작업자', '라인번호', '모델차수', 
-             '목표수량', '생산수량', '불량수량', '특이사항']
-        ]
+        values = [columns]  # 헤더 추가
         values.extend(backup_data.values.tolist())
         
         # 기존 데이터 삭제
