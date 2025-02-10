@@ -170,7 +170,7 @@ def sync_production_with_sheets():
         sheets = init_google_sheets()
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='production!A2:H'
+            range='production!A2:H'  # 헤더 제외하고 데이터만 가져오기
         ).execute()
         
         values = result.get('values', [])
@@ -185,6 +185,9 @@ def sync_production_with_sheets():
         numeric_columns = ['목표수량', '생산수량', '불량수량']
         for col in numeric_columns:
             production_df[col] = pd.to_numeric(production_df[col], errors='coerce').fillna(0)
+        
+        # 날짜 형식 통일
+        production_df['날짜'] = pd.to_datetime(production_df['날짜']).dt.strftime('%Y-%m-%d')
         
         # 세션 스테이트 업데이트
         st.session_state.daily_records = production_df
@@ -212,6 +215,14 @@ def backup_production_to_sheets():
         # 백업할 데이터 준비
         backup_data = st.session_state.daily_records.copy()
         
+        # 날짜 형식 통일
+        backup_data['날짜'] = pd.to_datetime(backup_data['날짜']).dt.strftime('%Y-%m-%d')
+        
+        # 숫자 데이터를 문자열로 변환
+        numeric_columns = ['목표수량', '생산수량', '불량수량']
+        for col in numeric_columns:
+            backup_data[col] = backup_data[col].astype(int).astype(str)
+        
         # DataFrame을 리스트로 변환
         values = [['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']]
         values.extend(backup_data.values.tolist())
@@ -226,7 +237,6 @@ def backup_production_to_sheets():
         body = {
             'values': values
         }
-        
         sheets.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range='production!A1',
@@ -680,60 +690,27 @@ def show_daily_production():
     tab1, tab2, tab3 = st.tabs(["신규 입력", "데이터 수정", "중복 데이터 관리"])
     
     with tab1:
-        with st.form("daily_production_form"):
-            date = st.date_input("작업일자", datetime.now())
+        st.subheader("현재 저장된 생산 데이터")
+        if len(st.session_state.daily_records) > 0:
+            # 표시할 데이터 준비
+            display_data = st.session_state.daily_records.copy()
             
-            # 작업자 선택 드롭다운
-            if len(st.session_state.workers) > 0:
-                worker_options = st.session_state.workers.set_index('사번')['이름'].to_dict()
-                worker_name = st.selectbox(
-                    "작업자",
-                    options=list(worker_options.values()),
-                    format_func=lambda x: x
-                )
-                worker_id = [k for k, v in worker_options.items() if v == worker_name][0]
-                
-                # 선택된 작업자의 라인번호 가져오기
-                worker_data = st.session_state.workers[st.session_state.workers['사번'] == worker_id].iloc[0]
+            # 날짜 기준 내림차순 정렬
+            display_data = display_data.sort_values('날짜', ascending=False)
             
-            # 모델차수 선택 드롭다운
-            if len(st.session_state.models) > 0:
-                # MODEL과 PROCESS를 조합하여 모델차수 옵션 생성
-                model_options = [f"{row['MODEL']}-{row['PROCESS']}" 
-                               for _, row in st.session_state.models.iterrows()]
-                model = st.selectbox("모델차수", options=sorted(set(model_options)))
-            else:
-                model = st.text_input("모델차수")
+            # 표시할 컬럼 선택
+            display_columns = ['날짜', '작업자', '라인번호', '모델차수', 
+                             '목표수량', '생산수량', '불량수량', '특이사항']
             
-            target_qty = st.number_input("목표수량", min_value=0)
-            produced_qty = st.number_input("생산수량", min_value=0)
-            defect_qty = st.number_input("불량수량", min_value=0)
-            notes = st.text_area("특이사항")
-            
-            submitted = st.form_submit_button("저장")
-            
-            if submitted:
-                # 날짜를 문자열로 변환
-                date_str = date.strftime('%Y-%m-%d')
-                
-                new_record = pd.DataFrame({
-                    '날짜': [date_str],  # 문자열 형식으로 저장
-                    '작업자': [worker_id],
-                    '라인번호': [worker_data['라인번호']],
-                    '모델차수': [model],
-                    '목표수량': [target_qty],
-                    '생산수량': [produced_qty],
-                    '불량수량': [defect_qty],
-                    '특이사항': [notes]
-                })
-                st.session_state.daily_records = pd.concat([st.session_state.daily_records, new_record], ignore_index=True)
-                
-                # 구글 시트에 자동 백업
-                if backup_production_to_sheets():
-                    st.success("생산 실적이 저장되고 백업되었습니다.")
-                else:
-                    st.warning("생산 실적이 저장되었으나 백업 중 오류가 발생했습니다.")
-
+            # 데이터프레임 표시
+            st.dataframe(
+                display_data[display_columns],
+                hide_index=True,
+                width=None
+            )
+        else:
+            st.info("저장된 생산 데이터가 없습니다.")
+    
     with tab2:
         st.subheader("기존 데이터 수정")
         
@@ -822,61 +799,55 @@ def show_daily_production():
         st.subheader("중복 데이터 관리")
         
         if len(st.session_state.daily_records) > 0:
-            # 날짜 선택
-            check_date = st.date_input("확인할 날짜 선택", datetime.now(), key="check_date")
+            check_date = st.date_input("확인할 날짜 선택", key="check_date")
             
             # 선택된 날짜의 데이터 필터링
-            daily_data = st.session_state.daily_records[
-                pd.to_datetime(st.session_state.daily_records['날짜']).dt.date == check_date
-            ]
+            mask = st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')
+            daily_data = st.session_state.daily_records[mask].copy()
             
             if len(daily_data) > 0:
-                # 작업자 이름 매핑
-                worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-                daily_data['작업자명'] = daily_data['작업자'].map(worker_names)
-                
                 # 중복 데이터 확인
                 duplicates = daily_data[daily_data.duplicated(subset=['작업자'], keep=False)]
                 
                 if len(duplicates) > 0:
-                    st.warning("다음 작업자의 데이터가 중복되어 있습니다:")
+                    st.warning("중복된 데이터가 발견되었습니다.")
                     
                     # 중복 데이터 표시
+                    display_columns = [
+                        '작업자', '라인번호', '모델차수', '목표수량',
+                        '생산수량', '불량수량', '특이사항'
+                    ]
                     st.dataframe(
-                        duplicates[['작업자명', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']],
+                        duplicates[display_columns],
                         hide_index=True
                     )
                     
                     # 중복 데이터 처리
-                    duplicate_workers = duplicates['작업자명'].unique()
+                    duplicate_workers = duplicates['작업자'].unique()
                     selected_worker = st.selectbox(
                         "삭제할 중복 데이터의 작업자 선택",
                         options=duplicate_workers
                     )
                     
                     if st.button("선택한 작업자의 중복 데이터 삭제"):
-                        # 작업자 ID 찾기
-                        worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
-                        
                         # 중복 데이터 중 마지막 항목을 제외한 나머지 삭제
-                        mask = (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) & (st.session_state.daily_records['작업자'] == worker_id)
+                        mask = (
+                            (st.session_state.daily_records['날짜'].astype(str) == check_date.strftime('%Y-%m-%d')) & 
+                            (st.session_state.daily_records['작업자'] == selected_worker)
+                        )
                         duplicate_indices = st.session_state.daily_records[mask].index[:-1]
-                        
-                        # 데이터 삭제
                         st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
                         
                         # 구글 시트 백업
                         if backup_production_to_sheets():
-                            st.success(f"selected_worker의 중복 데이터가 성공적으로 삭제되었습니다.")
+                            st.success(f"{selected_worker}의 중복 데이터가 성공적으로 삭제되었습니다.")
+                            st.rerun()
                         else:
                             st.warning("데이터는 삭제되었으나 백업 중 오류가 발생했습니다.")
-                        
-                        # 화면 새로고침
-                        st.rerun()
                 else:
-                    st.success("이 날짜에는 중복된 데이터가 없습니다.")
+                    st.success("중복된 데이터가 없습니다.")
             else:
-                st.info(f"{check_date} 날짜의 생산 데이터가 없습니다.")
+                st.info(f"{check_date.strftime('%Y-%m-%d')} 날짜의 생산 데이터가 없습니다.")
         else:
             st.info("등록된 생산 실적이 없습니다.")
 
