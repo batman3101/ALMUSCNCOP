@@ -425,14 +425,50 @@ def show_best_kpi_dashboard(current_data, previous_data=None, period=""):
         st.error(f"대시보드 표시 중 오류 발생: {str(e)}")
 
 def main():
-    # 관리자 계정 초기화
-    if init_admin_account():
-        st.success("관리자 계정이 생성되었습니다.")
+    # 페이지 설정
+    st.set_page_config(
+        page_title="CNC 작업자 KPI 관리 시스템",
+        page_icon="🏭",
+        layout="wide"
+    )
+
+    # 초기 데이터 로드
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'user_role' not in st.session_state:
+        st.session_state.user_role = None
+    if 'workers' not in st.session_state:
+        st.session_state.workers = pd.DataFrame(columns=['STT', '사번', '이름', '부서', '라인번호'])
+    if 'daily_records' not in st.session_state:
+        st.session_state.daily_records = pd.DataFrame(
+            columns=['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
+        )
+    if 'users' not in st.session_state:
+        st.session_state.users = pd.DataFrame(
+            columns=['이메일', '비밀번호', '이름', '권한']
+        )
+    if 'clear_users' not in st.session_state:
+        st.session_state.clear_users = True
+    if 'models' not in st.session_state:
+        st.session_state.models = pd.DataFrame(columns=['STT', 'MODEL', 'PROCESS'])
+
+    # 데이터 동기화
+    sync_workers_with_sheets()  # 작업자 데이터 동기화
+    sync_production_with_sheets()  # 생산 데이터 동기화
+    sync_models_with_sheets()  # 모델 데이터 동기화
     
+    # 사용자 데이터 초기화 및 동기화
+    if len(st.session_state.users) == 0:
+        init_admin_account()  # 관리자 계정이 없으면 생성
+    sync_users_with_sheets()  # 사용자 데이터 동기화
+
+    # 인증 상태에 따른 화면 표시
     if not st.session_state.authenticated:
         show_login()
-        return
+    else:
+        show_main_menu()
 
+def show_main_menu():
     st.sidebar.title("CNC 작업자 KPI 관리 시스템")
     
     if st.session_state.user_role == 'admin':
