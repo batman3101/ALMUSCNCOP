@@ -61,23 +61,36 @@ def init_google_sheets():
 def show_login():
     st.title("🔐 CNC 작업자 KPI 관리 시스템 로그인")
     
+    # 먼저 사용자 데이터 동기화
+    sync_users_with_sheets()
+    
     with st.form("login_form"):
         email = st.text_input("이메일")
         password = st.text_input("비밀번호", type="password")
         submitted = st.form_submit_button("로그인")
         
         if submitted:
+            # 디버깅을 위한 정보 출력
+            st.write("현재 등록된 사용자:", st.session_state.users['이메일'].tolist())
+            
             user = st.session_state.users[st.session_state.users['이메일'] == email]
-            if len(user) > 0 and bcrypt.checkpw(password.encode('utf-8'), 
-                                               user.iloc[0]['비밀번호'].encode('utf-8')):
-                st.session_state.authenticated = True
-                st.session_state.user_role = user.iloc[0]['권한']
-                st.success("로그인 성공!")
-                st.rerun()
+            if len(user) > 0:
+                try:
+                    stored_password = user.iloc[0]['비밀번호']
+                    if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                        st.session_state.authenticated = True
+                        st.session_state.user_role = user.iloc[0]['권한']
+                        st.success("로그인 성공!")
+                        st.rerun()
+                    else:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                except Exception as e:
+                    st.error(f"로그인 처리 중 오류 발생: {str(e)}")
             else:
-                st.error("이메일 또는 비밀번호가 잘못되었습니다.")
+                st.error("등록되지 않은 이메일입니다.")
 
 def init_admin_account():
+    """관리자 계정 초기화"""
     if st.session_state.clear_users or len(st.session_state.users) == 0:
         admin_email = 'zetooo1972@gmail.com'
         admin_password = 'admin7472'
@@ -96,6 +109,10 @@ def init_admin_account():
         
         # users DataFrame을 새로 생성
         st.session_state.users = admin_user
+        
+        # 구글 시트에 백업
+        backup_users_to_sheets()
+        
         st.session_state.clear_users = False
         return True
     return False
