@@ -203,11 +203,12 @@ def sync_production_with_sheets():
         return False
 
 def backup_production_to_sheets():
+    """생산 데이터를 구글 시트에 백업"""
     try:
         if len(st.session_state.daily_records) > 0:
             sheets = init_google_sheets()
             
-            # 데이터 준비
+            # 백업할 데이터 준비
             backup_data = st.session_state.daily_records.copy()
             
             # 날짜 형식 변환 (datetime을 문자열로)
@@ -218,13 +219,13 @@ def backup_production_to_sheets():
             backup_data['작업자'] = backup_data['작업자'].map(worker_names)
             
             # DataFrame을 리스트로 변환
-            values = [backup_data.columns.tolist()] + backup_data.values.tolist()
-            )
+            values = [backup_data.columns.tolist()]
+            values.extend(backup_data.values.tolist())
             
             # 기존 데이터 삭제
             sheets.values().clear(
                 spreadsheetId=SPREADSHEET_ID,
-                range='production!A1:Z'
+                range='production!A1:H'
             ).execute()
             
             # 새 데이터 쓰기
@@ -240,10 +241,9 @@ def backup_production_to_sheets():
             ).execute()
             
             return True
-            
         return False
     except Exception as e:
-        st.error(f"구글 시트 백업 중 오류 발생: {str(e)}")
+        st.error(f"생산 데이터 백업 중 오류 발생: {str(e)}")
         return False
 
 def show_data_backup():
@@ -812,6 +812,7 @@ def show_daily_production():
                         mask = (
                             (st.session_state.daily_records['날짜'].astype(str) == edit_date.strftime('%Y-%m-%d')) &
                             (st.session_state.daily_records['작업자'] == selected_record['작업자'])
+                        )
                         )
                         
                         st.session_state.daily_records.loc[mask, '라인번호'] = line_number
@@ -1484,6 +1485,20 @@ def backup_users_to_sheets():
     except Exception as e:
         st.error(f"사용자 데이터 백업 중 오류 발생: {str(e)}")
         return False
+
+def check_duplicate_records():
+    """중복 데이터 검사"""
+    if len(st.session_state.daily_records) > 0:
+        for worker_id in st.session_state.daily_records['작업자'].unique():
+            # 각 작업자별로 가장 최근 기록을 제외한 중복 기록 찾기
+            mask = st.session_state.daily_records['작업자'] == worker_id
+            duplicate_indices = st.session_state.daily_records[mask].index[:-1]
+            
+            if len(duplicate_indices) > 0:
+                # 중복 기록 삭제
+                st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
+                return True
+    return False
 
 if __name__ == "__main__":
     main()
