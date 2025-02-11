@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from google.oauth2 import service_account
@@ -286,11 +286,8 @@ def show_data_backup():
         st.subheader("현재 저장된 생산 데이터")
         st.dataframe(st.session_state.daily_records, hide_index=True)
 
-def create_production_chart(data, x_col, title='생산 현황'):
-    """생산 현황 차트 생성 함수"""
-    # 데이터 정렬 (날짜순 또는 작업자순)
-    data = data.sort_values(x_col)
-    
+def create_production_chart(data, x_col):
+    """생산 현황 차트 생성"""
     fig = go.Figure()
     
     # 목표수량 - 하늘색 막대
@@ -298,7 +295,8 @@ def create_production_chart(data, x_col, title='생산 현황'):
         name='목표수량',
         x=data[x_col],
         y=data['목표수량'],
-        marker_color='skyblue'
+        marker_color='rgba(135, 206, 235, 0.7)',
+        width=0.5
     ))
     
     # 생산수량 - 파란색 선
@@ -307,7 +305,7 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['생산수량'],
         mode='lines+markers',
-        line=dict(color='blue', width=2),
+        line=dict(color='rgb(0, 0, 139)', width=2),
         marker=dict(size=8)
     ))
     
@@ -317,15 +315,11 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['불량수량'],
         mode='lines+markers',
-        line=dict(color='red', width=2),
+        line=dict(color='rgb(255, 0, 0)', width=2),
         marker=dict(size=8)
     ))
     
     fig.update_layout(
-        title=title,
-        xaxis_title=x_col,
-        yaxis_title='수량',
-        height=400,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -333,7 +327,21 @@ def create_production_chart(data, x_col, title='생산 현황'):
             y=1.02,
             xanchor="right",
             x=1
-        )
+        ),
+        plot_bgcolor='white',
+        xaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            tickangle=45 if x_col == '작업자' else 0
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            zeroline=True,
+            zerolinecolor='rgba(128, 128, 128, 0.2)'
+        ),
+        margin=dict(l=50, r=50, t=50, b=50),
+        height=400
     )
     
     return fig
@@ -913,6 +921,8 @@ def show_worker_registration():
 def show_monthly_report():
     """월간 리포트"""
     st.title("📊 월간 리포트")
+    
+    # 연도와 월 선택
     col1, col2 = st.columns(2)
     with col1:
         year = st.selectbox("연도 선택", 
@@ -922,16 +932,21 @@ def show_monthly_report():
         month = st.selectbox("월 선택",
                            options=range(1, 13),
                            index=datetime.now().month-1)
-    st.markdown("---")
     
+    # 선택된 월의 시작일과 종료일 계산
     start_date = datetime(year, month, 1).date()
-    end_date = (datetime(year, month+1, 1) - pd.Timedelta(days=1)).date()
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+    else:
+        end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
     
+    # 해당 월의 데이터 필터링 (날짜 컬럼 이름 수정)
     monthly_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year) &
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month)
     ]
     
+    # 리포트 템플릿 표시
     show_report_content(monthly_data, "월간", start_date, end_date)
 
 def show_yearly_report():
@@ -1036,12 +1051,9 @@ def show_daily_report():
     """일간 리포트"""
     st.title("📊 일간 리포트")
     selected_date = st.date_input("날짜 선택", datetime.now())
-    st.markdown("---")
-    
     daily_data = st.session_state.daily_records[
         pd.to_datetime(st.session_state.daily_records['날짜']).dt.date == selected_date
     ]
-    
     show_report_content(daily_data, "일간", selected_date, selected_date)
 
 def show_weekly_report():
@@ -1050,64 +1062,101 @@ def show_weekly_report():
     selected_date = st.date_input("조회할 주의 시작일 선택", datetime.now())
     start_of_week = selected_date - pd.Timedelta(days=selected_date.weekday())
     end_of_week = start_of_week + pd.Timedelta(days=6)
-    st.markdown("---")
-    
     weekly_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= start_of_week) &
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date <= end_of_week)
     ]
-    
     show_report_content(weekly_data, "주간", start_of_week, end_of_week)
 
 def show_report_content(data, period_type, start_date, end_date):
     """리포트 내용 표시"""
-    # 전체 KPI 표시
-    st.subheader(f"{period_type} 전체 KPI")
+    # 이전 기간 데이터 가져오기
+    prev_data = get_previous_period_data(period_type, start_date, end_date)
+    
+    # 1. 전체 KPI 표시
+    st.subheader("📊 전체 KPI")
     total_kpi = calculate_kpi(data)
+    prev_total_kpi = calculate_kpi(prev_data)
+    
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("생산목표달성률", f"{total_kpi[0]:.2f}%")
+        delta = total_kpi[0] - prev_total_kpi[0]
+        st.metric("🎯 생산목표달성률", f"{total_kpi[0]:.2f}%", f"{delta:+.2f}%")
     with col2:
-        st.metric("불량률", f"{total_kpi[1]:.2f}%")
+        delta = total_kpi[1] - prev_total_kpi[1]
+        st.metric("⚠️ 불량률", f"{total_kpi[1]:.2f}%", f"{delta:+.2f}%")
     with col3:
-        st.metric("작업효율", f"{total_kpi[2]:.2f}%")
+        delta = total_kpi[2] - prev_total_kpi[2]
+        st.metric("⚡ 작업효율", f"{total_kpi[2]:.2f}%", f"{delta:+.2f}%")
     
-    # 작업자 선택 드롭다운
+    # 2. 최우수 작업자 KPI 표시
+    st.subheader("🏆 최우수 작업자 KPI")
+    best_workers = get_best_workers(data)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("##### 🎯 최고 목표달성")
+        st.markdown(f"**{best_workers['achievement']['name']}**")
+        delta = best_workers['achievement']['value'] - best_workers['achievement']['previous_value']
+        st.metric("달성률", 
+                 f"{best_workers['achievement']['value']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    with col2:
+        st.markdown("##### ✨ 최저 불량률")
+        st.markdown(f"**{best_workers['defect']['name']}**")
+        delta = best_workers['defect']['value'] - best_workers['defect']['previous_value']
+        st.metric("불량률",
+                 f"{best_workers['defect']['value']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    with col3:
+        st.markdown("##### 🏆 최고 작업효율")
+        st.markdown(f"**{best_workers['efficiency']['name']}**")
+        delta = best_workers['efficiency']['value'] - best_workers['efficiency']['previous_value']
+        st.metric("작업효율",
+                 f"{best_workers['efficiency']['value']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    # 3. 작업자 선택 및 KPI 표시
     worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
     all_workers = ['전체'] + list(worker_names.values())
-    selected_worker = st.selectbox("작업자 선택", options=all_workers)
+    selected_worker = st.selectbox("👥 작업자 선택", options=all_workers)
     
-    # 선택된 작업자의 KPI 표시
     if selected_worker != '전체':
         worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
         worker_data = data[data['작업자'] == worker_id]
+        prev_worker_data = prev_data[prev_data['작업자'] == worker_id]
+        
         if len(worker_data) > 0:
-            st.subheader(f"{selected_worker} KPI")
+            st.subheader(f"👤 {selected_worker} KPI")
             worker_kpi = calculate_kpi(worker_data)
+            prev_worker_kpi = calculate_kpi(prev_worker_data)
+            
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("생산목표달성률", f"{worker_kpi[0]:.2f}%")
+                delta = worker_kpi[0] - prev_worker_kpi[0]
+                st.metric("🎯 생산목표달성률", f"{worker_kpi[0]:.2f}%", f"{delta:+.2f}%")
             with col2:
-                st.metric("불량률", f"{worker_kpi[1]:.2f}%")
+                delta = worker_kpi[1] - prev_worker_kpi[1]
+                st.metric("⚠️ 불량률", f"{worker_kpi[1]:.2f}%", f"{delta:+.2f}%")
             with col3:
-                st.metric("작업효율", f"{worker_kpi[2]:.2f}%")
+                delta = worker_kpi[2] - prev_worker_kpi[2]
+                st.metric("⚡ 작업효율", f"{worker_kpi[2]:.2f}%", f"{delta:+.2f}%")
     
     # 작업자별 실적 표시
-    st.subheader("작업자별 실적")
+    st.subheader("📋 작업자별 실적")
     worker_stats = calculate_worker_stats(data)
     st.dataframe(worker_stats, hide_index=True)
     
     # 생산 현황 차트
-    st.subheader(f"{period_type} 생산 현황")
+    st.subheader(f"📈 {period_type} 생산 현황")
     if len(data) > 0:
+        chart_data = prepare_chart_data(data, period_type)
         fig = create_production_chart(
-            data.groupby('날짜').agg({
-                '목표수량': 'sum',
-                '생산수량': 'sum',
-                '불량수량': 'sum'
-            }).reset_index(),
-            '날짜',
-            f'{period_type} 생산 현황'
+            chart_data, 
+            '작업자' if period_type == '작업자별' else '날짜',
+            f"{period_type} 생산 현황"
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -1119,7 +1168,7 @@ def sync_models_with_sheets():
         # 구글 시트에서 모델차수 데이터 읽기
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='model!A2:D'  # A2부터 D열까지
+            range='model!A2:C'  # A2부터 C열까지
         ).execute()
         
         values = result.get('values', [])
@@ -1192,47 +1241,50 @@ def backup_users_to_sheets():
         return False
 
 def check_duplicate_records():
-    if len(st.session_state.daily_records) == 0:
-        return False
-    
-    duplicates_found = False
-    for worker_id in st.session_state.daily_records['작업자'].unique():
-        mask = st.session_state.daily_records['작업자'] == worker_id
-        worker_records = st.session_state.daily_records[mask]
-        
-        if len(worker_records) > 1:
-            duplicate_indices = worker_records.index[:-1]
-            st.session_state.daily_records = st.session_state.daily_records.drop(duplicate_indices)
-            duplicates_found = True
-    
-    return duplicates_found
-
-def update_production_record(
-    edit_date, selected_record, line_number, model,
-    target_qty, prod_qty, defect_qty, note
-):
+    """중복 데이터 검사"""
     try:
-        date_str = edit_date.strftime('%Y-%m-%d')
-        mask = (
-            (st.session_state.daily_records['날짜'].astype(str) == date_str) &
-            (st.session_state.daily_records['작업자'] == selected_record['작업자'])
-        )
+        # 중복 체크를 위한 키 컬럼
+        key_columns = ['날짜', '작업자', '라인번호', '모델차수']
         
-        updates = {
-            '라인번호': line_number,
-            '모델차수': model,
-            '목표수량': target_qty,
-            '생산수량': prod_qty,
-            '불량수량': defect_qty,
-            '특이사항': note
-        }
+        # 중복 레코드 찾기
+        duplicates = st.session_state.daily_records[
+            st.session_state.daily_records.duplicated(subset=key_columns, keep='first')
+        ]
         
-        for column, value in updates.items():
-            st.session_state.daily_records.loc[mask, column] = value
+        if len(duplicates) > 0:
+            # 중복 제거 (첫 번째 레코드 유지)
+            st.session_state.daily_records.drop_duplicates(
+                subset=key_columns, 
+                keep='first', 
+                inplace=True
+            )
+            return True
+            
+        return False
+    except Exception as e:
+        st.error(f"중복 검사 중 오류 발생: {str(e)}")
+        return False
+
+def update_production_record(date, old_record, line_number, model, target_qty, prod_qty, defect_qty, note):
+    """생산 기록 업데이트"""
+    try:
+        # 기존 레코드 찾기
+        idx = st.session_state.daily_records[
+            (st.session_state.daily_records['날짜'] == date.strftime('%Y-%m-%d')) &
+            (st.session_state.daily_records['작업자'] == old_record['작업자'])
+        ].index[0]
+        
+        # 레코드 업데이트
+        st.session_state.daily_records.loc[idx, '라인번호'] = line_number
+        st.session_state.daily_records.loc[idx, '모델차수'] = model
+        st.session_state.daily_records.loc[idx, '목표수량'] = target_qty
+        st.session_state.daily_records.loc[idx, '생산수량'] = prod_qty
+        st.session_state.daily_records.loc[idx, '불량수량'] = defect_qty
+        st.session_state.daily_records.loc[idx, '특이사항'] = note
         
         return True
     except Exception as e:
-        st.error(f"생산 기록 업데이트 중 오류 발생: {str(e)}")
+        st.error(f"데이터 업데이트 중 오류 발생: {str(e)}")
         return False
 
 def show_worker_report():
@@ -1507,18 +1559,101 @@ def calculate_best_kpi(data):
             'efficiency_rate': 0.0
         }
 
-def get_previous_period_data(start_date, end_date):
+def get_previous_period_data(period_type, start_date, end_date):
     """이전 기간 데이터 가져오기"""
-    period_length = end_date - start_date
-    previous_end = start_date - pd.Timedelta(days=1)
-    previous_start = previous_end - period_length
+    if period_type == "일간":
+        prev_start = start_date - pd.Timedelta(days=1)
+        prev_end = prev_start
+    elif period_type == "주간":
+        prev_start = start_date - pd.Timedelta(days=7)
+        prev_end = end_date - pd.Timedelta(days=7)
+    elif period_type == "월간":
+        prev_start = (start_date.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
+        prev_end = start_date - pd.Timedelta(days=1)
+    else:  # 연간
+        prev_start = datetime(start_date.year - 1, 1, 1).date()
+        prev_end = datetime(start_date.year - 1, 12, 31).date()
     
-    previous_data = st.session_state.daily_records[
-        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= previous_start) &
-        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date <= previous_end)
+    return st.session_state.daily_records[
+        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= prev_start) &
+        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date <= prev_end)
     ]
+
+def get_best_workers(data):
+    """최우수 작업자 KPI 계산"""
+    if len(data) == 0:
+        return {
+            'achievement': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0},
+            'defect': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0},
+            'efficiency': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0}
+        }
     
-    return previous_data
+    # 작업자별 KPI 계산
+    worker_stats = data.groupby('작업자').agg({
+        '목표수량': 'sum',
+        '생산수량': 'sum',
+        '불량수량': 'sum'
+    }).reset_index()
+    
+    # 작업자 이름 매핑
+    worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+    
+    # 달성률 계산
+    worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2)
+    # 불량률 계산
+    worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(2)
+    # 작업효율 계산
+    worker_stats['작업효율'] = (worker_stats['달성률'] * (1 - worker_stats['불량률']/100)).round(2)
+    
+    # 최우수 작업자 선정
+    best_achievement = worker_stats.loc[worker_stats['달성률'].idxmax()]
+    best_defect = worker_stats.loc[worker_stats['불량률'].idxmin()]
+    best_efficiency = worker_stats.loc[worker_stats['작업효율'].idxmax()]
+    
+    return {
+        'achievement': {
+            'name': worker_names.get(best_achievement['작업자'], 'Unknown'),
+            'value': best_achievement['달성률'],
+            'previous_value': 0.0  # 이전 기간 데이터는 필요에 따라 추가
+        },
+        'defect': {
+            'name': worker_names.get(best_defect['작업자'], 'Unknown'),
+            'value': best_defect['불량률'],
+            'previous_value': 0.0
+        },
+        'efficiency': {
+            'name': worker_names.get(best_efficiency['작업자'], 'Unknown'),
+            'value': best_efficiency['작업효율'],
+            'previous_value': 0.0
+        }
+    }
+
+def prepare_chart_data(data, period_type):
+    """차트 데이터 준비"""
+    if period_type == "작업자별":
+        # 작업자별 데이터 집계
+        chart_data = data.groupby('작업자').agg({
+            '목표수량': 'sum',
+            '생산수량': 'sum',
+            '불량수량': 'sum'
+        }).reset_index()
+        
+        # 작업자 사번을 이름으로 변환
+        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+        chart_data['작업자'] = chart_data['작업자'].map(worker_names)
+        
+    else:
+        # 날짜별 데이터 집계
+        chart_data = data.groupby('날짜').agg({
+            '목표수량': 'sum',
+            '생산수량': 'sum',
+            '불량수량': 'sum'
+        }).reset_index()
+        
+        # 날짜 형식 변환
+        chart_data['날짜'] = pd.to_datetime(chart_data['날짜']).dt.strftime('%Y-%m-%d')
+    
+    return chart_data
 
 if __name__ == "__main__":
     main()
