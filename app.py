@@ -1514,36 +1514,18 @@ def calculate_worker_stats(data):
         if len(data) == 0:
             return pd.DataFrame(columns=['작업자명', '목표수량', '생산수량', '불량수량', '달성률', '불량률', '작업효율'])
         
-        # 작업자 이름 매핑
-        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-        
-        # 모든 작업자 목록 생성
-        all_workers_df = pd.DataFrame({
-            '작업자': list(worker_names.keys()),
-            '작업자명': list(worker_names.values())
-        })
-        
-        # 데이터 복사 및 작업자명 매핑
+        # 데이터 복사
         data = data.copy()
-        data['작업자명'] = data['작업자'].map(worker_names)
         
-        # 작업자별 집계
-        worker_stats = data.groupby('작업자명').agg({
+        # 작업자별 집계 (작업자명 매핑 없이 직접 사용)
+        worker_stats = data.groupby('작업자').agg({
             '목표수량': 'sum',
             '생산수량': 'sum',
             '불량수량': 'sum'
         }).reset_index()
         
-        # 누락된 작업자 추가
-        worker_stats = pd.merge(
-            all_workers_df[['작업자명']], 
-            worker_stats, 
-            on='작업자명', 
-            how='left'
-        )
-        
-        # 누락된 값을 0으로 채우기
-        worker_stats = worker_stats.fillna(0)
+        # 컬럼명 변경
+        worker_stats = worker_stats.rename(columns={'작업자': '작업자명'})
         
         # KPI 계산
         worker_stats['달성률'] = np.where(
