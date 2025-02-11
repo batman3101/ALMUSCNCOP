@@ -295,8 +295,8 @@ def create_production_chart(data, worker_col, title):
         name='목표수량',
         x=data[worker_col],
         y=data['목표수량'],
-        marker_color='rgba(173,216,230,0.7)',  # 더 연한 파란색으로 수정
-        width=0.5  # 막대 너비 조정
+        marker_color='rgba(173,216,230,0.7)',
+        width=0.5
     ))
     
     # 생산수량 꺾은선 그래프 (진한 파란색)
@@ -304,9 +304,9 @@ def create_production_chart(data, worker_col, title):
         name='생산수량',
         x=data[worker_col],
         y=data['생산수량'],
-        line=dict(color='rgb(0,0,255)', width=3),  # 선 색상과 굵기 조정
+        line=dict(color='rgb(0,0,255)', width=3),
         mode='lines+markers',
-        marker=dict(size=8)  # 마커 크기 조정
+        marker=dict(size=8)
     ))
     
     # 불량수량 꺾은선 그래프 (빨간색)
@@ -314,32 +314,33 @@ def create_production_chart(data, worker_col, title):
         name='불량수량',
         x=data[worker_col],
         y=data['불량수량'],
-        line=dict(color='rgb(255,0,0)', width=3),  # 선 굵기 조정
+        line=dict(color='rgb(255,0,0)', width=3),
         mode='lines+markers',
-        marker=dict(size=8)  # 마커 크기 조정
+        marker=dict(size=8)
     ))
 
     # 차트 레이아웃 설정
     fig.update_layout(
-        title=title,
-        xaxis_title=None,  # x축 제목 제거
-        yaxis_title=None,  # y축 제목 제거
+        title=None,  # 제목 제거
+        xaxis_title=None,
+        yaxis_title=None,
         showlegend=True,
         legend=dict(
-            orientation="h",  # 범례를 수평으로 변경
+            orientation="h",
             yanchor="bottom",
-            y=1.02,  # 범례 위치 조정
+            y=1.02,
             xanchor="right",
             x=1
         ),
-        height=400,  # 차트 높이 조정
+        height=400,
         width=None,
         margin=dict(l=50, r=50, t=50, b=50),
         xaxis=dict(
             showgrid=True,
             gridcolor='rgba(0,0,0,0.1)',
             gridwidth=1,
-            tickangle=0
+            tickangle=0,
+            categoryorder='total descending'  # 값에 따라 작업자 정렬
         ),
         yaxis=dict(
             showgrid=True,
@@ -347,13 +348,13 @@ def create_production_chart(data, worker_col, title):
             gridwidth=1,
             zerolinecolor='rgba(0,0,0,0.1)'
         ),
-        plot_bgcolor='white',  # 배경색 흰색으로 설정
-        paper_bgcolor='white'  # 차트 바깥 배경색 흰색으로 설정
+        plot_bgcolor='white',
+        paper_bgcolor='white'
     )
     
-    # y축 범위 설정 (0부터 시작)
-    max_value = max(data['목표수량'].max(), data['생산수량'].max(), data['불량수량'].max())
-    fig.update_yaxes(range=[0, max_value * 1.1])  # 최대값의 110%까지 표시
+    # y축 범위 설정
+    max_value = max(data['목표수량'].max(), data['생산수량'].max())
+    fig.update_yaxes(range=[0, max_value * 1.1])
     
     return fig
 
@@ -1079,77 +1080,23 @@ def show_weekly_report():
     show_report_content(weekly_data, "주간", start_of_week, end_of_week)
 
 def show_report_content(data, period_type, start_date, end_date):
-    """리포트 내용 표시 (타이틀 제외)"""
-    # 작업자 선택 드롭다운
-    worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-    all_workers = ['전체'] + list(worker_names.values())
-    selected_worker = st.selectbox("작업자 선택", options=all_workers)
+    """리포트 내용 표시"""
+    # 작업자별 실적 계산
+    worker_stats = calculate_worker_stats(data)
     
-    # 데이터 필터링
-    filtered_data = data.copy()
-    if selected_worker != '전체':
-        worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
-        filtered_data = filtered_data[filtered_data['작업자'] == worker_id]
-    
-    # 최우수 KPI 작업자 섹션
-    st.subheader(f"{period_type} 최우수 KPI 작업자")
-    current_kpi = calculate_best_kpi(filtered_data)
-    previous_kpi = calculate_best_kpi(get_previous_period_data(start_date, end_date))
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("##### 🎯 최고 목표달성")
-        st.markdown(f"**{current_kpi['best_achievement_worker']}**")
-        delta = current_kpi['achievement_rate'] - previous_kpi['achievement_rate']
-        st.metric("달성률", 
-                 f"{current_kpi['achievement_rate']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    with col2:
-        st.markdown("##### ✨ 최저 불량률")
-        st.markdown(f"**{current_kpi['best_quality_worker']}**")
-        delta = current_kpi['defect_rate'] - previous_kpi['defect_rate']
-        st.metric("불량률",
-                 f"{current_kpi['defect_rate']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    with col3:
-        st.markdown("##### 🏆 최고 작업효율")
-        st.markdown(f"**{current_kpi['best_efficiency_worker']}**")
-        delta = current_kpi['efficiency_rate'] - previous_kpi['efficiency_rate']
-        st.metric("작업효율",
-                 f"{current_kpi['efficiency_rate']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    st.markdown("---")  # 구분선 추가
-    
-    # 전체 KPI 지표
-    st.subheader("전체 KPI 지표")
-    total_kpi = calculate_kpi(filtered_data)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(f"{period_type} 생산목표달성률", f"{total_kpi[0]:.2f}%")
-    with col2:
-        st.metric(f"{period_type} 불량률", f"{total_kpi[1]:.2f}%")
-    with col3:
-        st.metric(f"{period_type} 작업효율", f"{total_kpi[2]:.2f}%")
-    
-    st.markdown("---")  # 구분선 추가
-    
-    # 작업자별 실적
+    # 작업자별 실적 테이블 표시
     st.subheader("작업자별 실적")
-    worker_stats = calculate_worker_stats(filtered_data)
     st.dataframe(worker_stats, hide_index=True)
     
-    # 일별 생산 현황 차트
-    st.subheader("일별 생산 현황")
-    daily_stats = filtered_data.groupby('날짜').agg({
-        '목표수량': 'sum',
-        '생산수량': 'sum',
-        '불량수량': 'sum'
-    }).reset_index()
+    # 작업자별 생산 현황 차트
+    st.subheader("작업자별 생산 현황")
     
-    fig = create_production_chart(daily_stats, '날짜', f'{period_type} 생산 현황')
+    # 테이블 데이터를 기반으로 차트 생성
+    fig = create_production_chart(
+        worker_stats,  # 이미 계산된 worker_stats 사용
+        '작업자명',
+        f'{period_type} 작업자별 생산 현황'
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 def sync_models_with_sheets():
