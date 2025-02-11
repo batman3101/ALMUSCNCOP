@@ -945,6 +945,8 @@ def show_weekly_report():
     start_of_week = selected_date - timedelta(days=selected_date.weekday())
     end_of_week = start_of_week + timedelta(days=6)
     
+    st.markdown(f"{start_of_week.strftime('%Y/%m/%d')} ~ {end_of_week.strftime('%Y/%m/%d')}")
+    
     # 해당 주의 데이터 필터링
     weekly_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= start_of_week) &
@@ -960,7 +962,7 @@ def show_report_content(data, period_type, start_date, end_date):
     st.markdown(f"조회할 {period_type} 시작일 선택")
     
     # 1. 전체 KPI
-    st.markdown(f"## 📊 전체 KPI")
+    st.markdown("## 📊 전체 KPI")
     
     # 이전 기간 데이터 계산
     period_length = (end_date - start_date).days + 1
@@ -1192,23 +1194,20 @@ def calculate_best_kpi(data):
 
 def get_previous_period_data(period_type, start_date, end_date):
     """이전 기간 데이터 가져오기"""
-    if period_type == "일간":
-        prev_start = start_date - pd.Timedelta(days=1)
-        prev_end = prev_start
-    elif period_type == "주간":
-        prev_start = start_date - pd.Timedelta(days=7)
-        prev_end = end_date - pd.Timedelta(days=7)
-    elif period_type == "월간":
-        prev_start = (start_date.replace(day=1) - pd.Timedelta(days=1)).replace(day=1)
-        prev_end = start_date - pd.Timedelta(days=1)
-    else:  # 연간
-        prev_start = datetime(start_date.year - 1, 1, 1).date()
-        prev_end = datetime(start_date.year - 1, 12, 31).date()
+    if period_type == "주간":
+        prev_end = start_date - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=6)
+    else:
+        period_length = (end_date - start_date).days + 1
+        prev_end = start_date - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=period_length-1)
     
-    return st.session_state.daily_records[
+    prev_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= prev_start) &
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date <= prev_end)
     ]
+    
+    return prev_data
 
 def get_best_workers(data):
     """최우수 작업자 KPI 계산"""
