@@ -1634,8 +1634,20 @@ def show_report_template(data, period_type, start_date, end_date):
 def calculate_worker_stats(data):
     """작업자별 통계 계산"""
     try:
+        # 빈 데이터 체크
+        if len(data) == 0:
+            return pd.DataFrame(columns=['작업자명', '목표수량', '생산수량', '불량수량', '달성률', '불량률', '작업효율'])
+        
         # 작업자 이름 매핑
         worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+        
+        # 모든 작업자 목록 생성
+        all_workers_df = pd.DataFrame({
+            '작업자': list(worker_names.keys()),
+            '작업자명': list(worker_names.values())
+        })
+        
+        # 데이터 복사 및 작업자명 매핑
         data = data.copy()
         data['작업자명'] = data['작업자'].map(worker_names)
         
@@ -1646,19 +1658,41 @@ def calculate_worker_stats(data):
             '불량수량': 'sum'
         }).reset_index()
         
+        # 누락된 작업자 추가
+        worker_stats = pd.merge(
+            all_workers_df[['작업자명']], 
+            worker_stats, 
+            on='작업자명', 
+            how='left'
+        )
+        
+        # 누락된 값을 0으로 채우기
+        worker_stats = worker_stats.fillna(0)
+        
         # KPI 계산
-        worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2)
-        worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(2)
+        worker_stats['달성률'] = np.where(
+            worker_stats['목표수량'] > 0,
+            (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2),
+            0.0
+        )
+        
+        worker_stats['불량률'] = np.where(
+            worker_stats['생산수량'] > 0,
+            (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(2),
+            0.0
+        )
+        
         worker_stats['작업효율'] = (worker_stats['달성률'] * (1 - worker_stats['불량률']/100)).round(2)
         
-        # NaN 값 처리
-        worker_stats = worker_stats.fillna(0)
+        # 숫자 컬럼 정수로 변환
+        int_columns = ['목표수량', '생산수량', '불량수량']
+        worker_stats[int_columns] = worker_stats[int_columns].astype(int)
         
         return worker_stats
         
     except Exception as e:
         st.error(f"작업자별 통계 계산 중 오류 발생: {str(e)}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=['작업자명', '목표수량', '생산수량', '불량수량', '달성률', '불량률', '작업효율'])
 
 def calculate_best_kpi(data):
     """최우수 KPI 계산"""
