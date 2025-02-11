@@ -91,31 +91,35 @@ def show_login():
 
 def init_admin_account():
     """관리자 계정 초기화"""
-    if st.session_state.clear_users or len(st.session_state.users) == 0:
-        admin_email = 'zetooo1972@gmail.com'
-        admin_password = 'admin7472'
-        admin_name = '관리자'
+    try:
+        # 구글 시트에서 작업자 정보 가져오기
+        sheets = init_google_sheets()
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='workers!A2:C'
+        ).execute()
         
-        # 비밀번호 해싱
-        hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
+        values = result.get('values', [])
+        if not values:
+            st.error("작업자 정보를 불러올 수 없습니다.")
+            return False
+            
+        # DataFrame 생성
+        workers_df = pd.DataFrame(values, columns=['사번', '이름', '직책'])
         
-        # 관리자 계정 생성
-        admin_user = pd.DataFrame({
-            '이메일': [admin_email],
-            '비밀번호': [hashed_password.decode('utf-8')],
-            '이름': [admin_name],
-            '권한': ['admin']
-        })
+        # 세션 스테이트에 저장
+        st.session_state.workers = workers_df
         
-        # users DataFrame을 새로 생성
-        st.session_state.users = admin_user
-        
-        # 구글 시트에 백업
-        backup_users_to_sheets()
-        
-        st.session_state.clear_users = False
+        # 생산 데이터 동기화
+        if not sync_production_with_sheets():
+            st.error("생산 데이터 동기화 실패")
+            return False
+            
         return True
-    return False
+        
+    except Exception as e:
+        st.error(f"관리자 계정 초기화 중 오류 발생: {str(e)}")
+        return False
 
 def sync_workers_with_sheets():
     """구글 시트에서 작업자 데이터 동기화"""
@@ -417,56 +421,43 @@ def show_best_kpi_dashboard(current_data, previous_data=None, period=""):
         st.error(f"대시보드 표시 중 오류 발생: {str(e)}")
 
 def main():
+    """메인 함수"""
+    # 페이지 설정
+    st.set_page_config(
+        page_title="생산관리 시스템",
+        page_icon="📊",
+        layout="wide"
+    )
+    
+    # 세션 스테이트 초기화
+    if 'workers' not in st.session_state:
+        st.session_state.workers = pd.DataFrame()
+    if 'daily_records' not in st.session_state:
+        st.session_state.daily_records = pd.DataFrame()
+    
     # 관리자 계정 초기화
     if init_admin_account():
-        st.success("관리자 계정이 생성되었습니다.")
-    
-    if not st.session_state.authenticated:
-        show_login()
-    else:
-        # 메뉴 옵션 설정
-        if st.session_state.user_role == 'admin':
-            menu_options = [
-                "종합 대시보드",
-                "사용자 관리",
-                "작업자 등록",
-                "일일 생산 실적 입력",
-                "일간 리포트",
-                "월간 리포트",
-                "연간 리포트"
-            ]
-        else:
-            menu_options = [
-                "종합 대시보드",
-                "일일 생산 실적 입력",
-                "일간 리포트",
-                "월간 리포트",
-                "연간 리포트"
-            ]
-        
         # 사이드바 메뉴
-        with st.sidebar:
-            menu = st.selectbox("메뉴 선택", menu_options)
-            if st.button("로그아웃"):
-                st.session_state.authenticated = False
-                st.session_state.user_role = None
-                st.rerun()
+        menu = st.sidebar.selectbox(
+            "메뉴 선택",
+            ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트", "일일 생산 실적 입력/수정"]
+        )
         
-        # 선택된 메뉴에 따른 화면 표시
-        if menu == "종합 대시보드":
+        # 선택된 메뉴에 따라 페이지 표시
+        if menu == "대시보드":
             show_dashboard()
-        elif menu == "사용자 관리":
-            show_user_management()
-        elif menu == "작업자 등록":
-            show_worker_registration()
-        elif menu == "일일 생산 실적 입력":
-            show_daily_production()
         elif menu == "일간 리포트":
             show_daily_report()
+        elif menu == "주간 리포트":
+            show_weekly_report()
         elif menu == "월간 리포트":
             show_monthly_report()
         elif menu == "연간 리포트":
             show_yearly_report()
+        elif menu == "일일 생산 실적 입력/수정":
+            show_daily_production()
+    else:
+        st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
 
 def show_dashboard():
     st.title("📊 종합 대시보드")
