@@ -91,7 +91,7 @@ def init_admin_account():
         try:
             result = sheets.values().get(
                 spreadsheetId=SPREADSHEET_ID,
-                range='workers!A1:C'  # 헤더 포함하여 가져오기
+                range='worker!A1:E'  # worker 시트에서 A~E열까지 가져오기
             ).execute()
             
             values = result.get('values', [])
@@ -101,9 +101,9 @@ def init_admin_account():
                 
             # DataFrame 생성 (헤더가 있는 경우와 없는 경우 모두 처리)
             if len(values) > 1:
-                workers_df = pd.DataFrame(values[1:], columns=values[0])
+                workers_df = pd.DataFrame(values[1:], columns=['STT', '사번', '이름', '부서', '라인번호'])
             else:
-                workers_df = pd.DataFrame(columns=['사번', '이름', '직책'])
+                workers_df = pd.DataFrame(columns=['STT', '사번', '이름', '부서', '라인번호'])
             
             # 세션 스테이트에 저장
             st.session_state.workers = workers_df
