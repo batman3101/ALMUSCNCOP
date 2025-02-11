@@ -291,16 +291,15 @@ def create_production_chart(data, x_col, title='생산 현황'):
     # 데이터 정렬
     data = data.sort_values(x_col)
     
-    # 차트 생성
     fig = go.Figure()
     
-    # 목표수량 막대 그래프 (하늘색)
+    # 목표수량 막대 그래프 (연한 파란색)
     fig.add_trace(go.Bar(
         name='목표수량',
         x=data[x_col],
         y=data['목표수량'],
-        marker_color='rgba(135, 206, 235, 0.7)',  # 하늘색
-        hovertemplate='목표수량: %{y}<extra></extra>'
+        marker_color='rgba(173, 216, 230, 0.7)',  # 연한 파란색
+        width=0.6
     ))
     
     # 생산수량 선 그래프 (진한 파란색)
@@ -309,9 +308,8 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['생산수량'],
         mode='lines+markers',
-        line=dict(color='rgb(0, 0, 139)', width=2),  # 진한 파란색
-        marker=dict(size=8),
-        hovertemplate='생산수량: %{y}<extra></extra>'
+        line=dict(color='rgb(0, 0, 139)', width=2),
+        marker=dict(size=8)
     ))
     
     # 불량수량 선 그래프 (빨간색)
@@ -320,14 +318,12 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['불량수량'],
         mode='lines+markers',
-        line=dict(color='rgb(255, 0, 0)', width=2),  # 빨간색
-        marker=dict(size=8),
-        hovertemplate='불량수량: %{y}<extra></extra>'
+        line=dict(color='rgb(255, 0, 0)', width=2),
+        marker=dict(size=8)
     ))
     
     # 차트 레이아웃 설정
     fig.update_layout(
-        title=title,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -338,7 +334,7 @@ def create_production_chart(data, x_col, title='생산 현황'):
         ),
         plot_bgcolor='white',
         xaxis=dict(
-            title=x_col,
+            title=None,
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             tickangle=45 if x_col == '작업자' else 0
@@ -347,8 +343,7 @@ def create_production_chart(data, x_col, title='생산 현황'):
             title='수량',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
-            zeroline=True,
-            zerolinecolor='rgba(128, 128, 128, 0.2)'
+            range=[0, max(data['목표수량']) * 1.1]  # y축 범위 설정
         ),
         margin=dict(l=50, r=50, t=50, b=50),
         height=400
@@ -1670,6 +1665,31 @@ def prepare_chart_data(data, period_type):
         chart_data['날짜'] = pd.to_datetime(chart_data['날짜']).dt.strftime('%Y-%m-%d')
     
     return chart_data
+
+def show_worker_kpi(worker_name, data):
+    """선택된 작업자의 KPI 표시"""
+    worker_data = data[data['작업자'] == worker_name]
+    
+    if len(worker_data) > 0:
+        # KPI 계산
+        목표수량 = worker_data['목표수량'].sum()
+        생산수량 = worker_data['생산수량'].sum()
+        불량수량 = worker_data['불량수량'].sum()
+        
+        달성률 = (생산수량 / 목표수량 * 100).round(2)
+        불량률 = (불량수량 / 생산수량 * 100).round(2)
+        작업효율 = (달성률 * (1 - 불량률/100)).round(2)
+        
+        # KPI 표시
+        st.markdown("#### 📊 선택 작업자 KPI")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("🎯 목표달성률", f"{달성률}%")
+        with col2:
+            st.metric("⚠️ 불량률", f"{불량률}%")
+        with col3:
+            st.metric("🏆 작업효율", f"{작업효율}%")
 
 if __name__ == "__main__":
     main()
