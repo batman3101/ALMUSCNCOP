@@ -1604,8 +1604,14 @@ def get_best_workers(data):
         '불량수량': 'sum'
     }).reset_index()
     
-    # 작업자 이름 매핑
-    worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+    # 작업자 정보 가져오기
+    workers_df = st.session_state.workers.copy()
+    worker_stats = worker_stats.merge(
+        workers_df[['사번', '이름']], 
+        left_on='작업자', 
+        right_on='사번', 
+        how='left'
+    )
     
     # 달성률 계산
     worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2)
@@ -1621,17 +1627,17 @@ def get_best_workers(data):
     
     return {
         'achievement': {
-            'name': worker_names.get(best_achievement['작업자'], 'Unknown'),
+            'name': best_achievement['이름'],
             'value': best_achievement['달성률'],
-            'previous_value': 0.0  # 이전 기간 데이터는 필요에 따라 추가
+            'previous_value': 0.0
         },
         'defect': {
-            'name': worker_names.get(best_defect['작업자'], 'Unknown'),
+            'name': best_defect['이름'],
             'value': best_defect['불량률'],
             'previous_value': 0.0
         },
         'efficiency': {
-            'name': worker_names.get(best_efficiency['작업자'], 'Unknown'),
+            'name': best_efficiency['이름'],
             'value': best_efficiency['작업효율'],
             'previous_value': 0.0
         }
