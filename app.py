@@ -38,12 +38,27 @@ if 'models' not in st.session_state:
 def init_google_sheets():
     """구글 시트 API 초기화"""
     try:
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"],
+        credentials = {
+            "type": "service_account",
+            "project_id": st.secrets["gcp_service_account"]["project_id"],
+            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+            "private_key": st.secrets["gcp_service_account"]["private_key"],
+            "client_email": st.secrets["gcp_service_account"]["client_email"],
+            "client_id": st.secrets["gcp_service_account"]["client_id"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+        }
+        
+        creds = service_account.Credentials.from_service_account_info(
+            credentials,
             scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
-        service = build('sheets', 'v4', credentials=credentials)
+        
+        service = build('sheets', 'v4', credentials=creds)
         return service.spreadsheets()
+        
     except Exception as e:
         st.error(f"구글 시트 초기화 중 오류 발생: {str(e)}")
         return None
@@ -933,9 +948,6 @@ def show_report_content(data, period_type, start_date, end_date):
         # 작업자 이름으로 변환
         worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
         worker_data['작업자'] = worker_data['작업자'].map(lambda x: worker_names.get(x, x))
-        
-        fig = create_production_chart(worker_data, '작업자')
-        st.plotly_chart(fig, use_container_width=True)
 
 def calculate_kpi_with_delta(current_data, previous_data):
     """KPI 계산 및 이전 기간과 비교"""
@@ -1230,21 +1242,32 @@ def verify_user_credentials(username, password):
             
         # 일반 사용자 확인
         sheets = init_google_sheets()
-        result = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='users!A:C'  # 범위를 'A:C'로 수정
-        ).execute()
-        
-        users = result.get('values', [])
-        if not users:  # 데이터가 없는 경우
+        if not sheets:
+            st.error("구글 시트 연결 실패")
             return False
             
-        # 헤더를 제외한 사용자 데이터 확인
-        for user in users[1:]:  # 첫 번째 행(헤더) 제외
-            if len(user) >= 2 and user[0] == username and user[1] == password:
-                return True
-        return False
-        
+        try:
+            result = sheets.values().get(
+                spreadsheetId=st.secrets["spreadsheet_id"],
+                range='users'  # 시트 전체를 가져오도록 수정
+            ).execute()
+            
+            users = result.get('values', [])
+            if not users:  # 데이터가 없는 경우
+                st.warning("등록된 사용자가 없습니다.")
+                return False
+                
+            # 사용자 데이터 확인
+            for user in users:
+                if len(user) >= 2 and user[0] == username and user[1] == password:
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            st.error(f"사용자 데이터 조회 중 오류: {str(e)}")
+            return False
+            
     except Exception as e:
         st.error(f"사용자 검증 중 오류 발생: {str(e)}")
         return False
