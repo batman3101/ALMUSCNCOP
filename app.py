@@ -36,26 +36,16 @@ if 'models' not in st.session_state:
     st.session_state.models = pd.DataFrame(columns=['STT', 'MODEL', 'PROCESS'])
 
 def init_google_sheets():
+    """구글 시트 API 초기화"""
     try:
-        # 서비스 계정 정보 가져오기 시도
-        try:
-            # Streamlit Cloud 환경
-            credentials = service_account.Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"],
-                scopes=SCOPES
-            )
-        except Exception:
-            # 로컬 환경
-            credentials = service_account.Credentials.from_service_account_file(
-                'cnc-op-kpi-management-d552546430e8.json',
-                scopes=SCOPES
-            )
-        
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
         service = build('sheets', 'v4', credentials=credentials)
-        sheets = service.spreadsheets()
-        return sheets
+        return service.spreadsheets()
     except Exception as e:
-        st.error(f"Google Sheets API 초기화 중 오류 발생: {str(e)}")
+        st.error(f"구글 시트 초기화 중 오류 발생: {str(e)}")
         return None
 
 def show_login():
@@ -92,24 +82,36 @@ def show_login():
 def init_admin_account():
     """관리자 계정 초기화"""
     try:
-        # 구글 시트에서 작업자 정보 가져오기
         sheets = init_google_sheets()
-        result = sheets.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range='workers!A:C'  # 범위 수정: A2:C -> A:C
-        ).execute()
-        
-        values = result.get('values', [])
-        if not values:
-            st.error("작업자 정보를 불러올 수 없습니다.")
+        if sheets is None:
+            st.error("구글 시트 연결 실패")
             return False
             
-        # 헤더를 제외한 데이터만 사용
-        workers_df = pd.DataFrame(values[1:], columns=['사번', '이름', '직책'])  # 첫 번째 행(헤더) 제외
-        
-        # 세션 스테이트에 저장
-        st.session_state.workers = workers_df
-        
+        # 작업자 정보 가져오기
+        try:
+            result = sheets.values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range='workers!A1:C'  # 헤더 포함하여 가져오기
+            ).execute()
+            
+            values = result.get('values', [])
+            if not values:
+                st.error("작업자 정보가 비어있습니다.")
+                return False
+                
+            # DataFrame 생성 (헤더가 있는 경우와 없는 경우 모두 처리)
+            if len(values) > 1:
+                workers_df = pd.DataFrame(values[1:], columns=values[0])
+            else:
+                workers_df = pd.DataFrame(columns=['사번', '이름', '직책'])
+            
+            # 세션 스테이트에 저장
+            st.session_state.workers = workers_df
+            
+        except Exception as e:
+            st.error(f"작업자 정보 로딩 중 오류: {str(e)}")
+            return False
+            
         # 생산 데이터 동기화
         if not sync_production_with_sheets():
             st.error("생산 데이터 동기화 실패")
@@ -435,29 +437,34 @@ def main():
     if 'daily_records' not in st.session_state:
         st.session_state.daily_records = pd.DataFrame()
     
-    # 관리자 계정 초기화
-    if init_admin_account():
-        # 사이드바 메뉴
-        menu = st.sidebar.selectbox(
-            "메뉴 선택",
-            ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트", "일일 생산 실적 입력/수정"]
-        )
-        
-        # 선택된 메뉴에 따라 페이지 표시
-        if menu == "대시보드":
-            show_dashboard()
-        elif menu == "일간 리포트":
-            show_daily_report()
-        elif menu == "주간 리포트":
-            show_weekly_report()
-        elif menu == "월간 리포트":
-            show_monthly_report()
-        elif menu == "연간 리포트":
-            show_yearly_report()
-        elif menu == "일일 생산 실적 입력/수정":
-            show_daily_production()
-    else:
-        st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
+    try:
+        # 관리자 계정 초기화
+        if init_admin_account():
+            # 사이드바 메뉴
+            menu = st.sidebar.selectbox(
+                "메뉴 선택",
+                ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트", "일일 생산 실적 입력/수정"]
+            )
+            
+            # 선택된 메뉴에 따라 페이지 표시
+            if menu == "대시보드":
+                show_dashboard()
+            elif menu == "일간 리포트":
+                show_daily_report()
+            elif menu == "주간 리포트":
+                show_weekly_report()
+            elif menu == "월간 리포트":
+                show_monthly_report()
+            elif menu == "연간 리포트":
+                show_yearly_report()
+            elif menu == "일일 생산 실적 입력/수정":
+                show_daily_production()
+        else:
+            st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
+            
+    except Exception as e:
+        st.error(f"시스템 실행 중 오류 발생: {str(e)}")
+        st.error("시스템을 다시 시작해주세요.")
 
 def show_dashboard():
     st.title("📊 종합 대시보드")
@@ -1019,7 +1026,7 @@ def show_report_content(data, period_type, start_date, end_date):
         
         # 작업자 이름으로 변환
         worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-        worker_data['작업자'] = worker_data['작업자'].map(worker_names)
+        worker_data['작업자'] = worker_data['작업자'].map(lambda x: worker_names.get(x, x))
         
         fig = create_production_chart(worker_data, '작업자')
         st.plotly_chart(fig, use_container_width=True)
