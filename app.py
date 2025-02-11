@@ -1267,9 +1267,72 @@ def show_report_content(data, period_type, start_date, end_date):
     all_workers = ['전체'] + list(worker_names.values())
     selected_worker = st.selectbox("작업자 선택", options=all_workers)
     
-    # 나머지 리포트 내용은 기존 show_report_template 함수의 내용과 동일
-    # (타이틀과 기간 표시 부분 제외)
-    ...
+    # 데이터 필터링
+    filtered_data = data.copy()
+    if selected_worker != '전체':
+        worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
+        filtered_data = filtered_data[filtered_data['작업자'] == worker_id]
+    
+    # 최우수 KPI 작업자 섹션
+    st.subheader(f"{period_type} 최우수 KPI 작업자")
+    current_kpi = calculate_best_kpi(filtered_data)
+    previous_kpi = calculate_best_kpi(get_previous_period_data(start_date, end_date))
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("##### 🎯 최고 목표달성")
+        st.markdown(f"**{current_kpi['best_achievement_worker']}**")
+        delta = current_kpi['achievement_rate'] - previous_kpi['achievement_rate']
+        st.metric("달성률", 
+                 f"{current_kpi['achievement_rate']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    with col2:
+        st.markdown("##### ✨ 최저 불량률")
+        st.markdown(f"**{current_kpi['best_quality_worker']}**")
+        delta = current_kpi['defect_rate'] - previous_kpi['defect_rate']
+        st.metric("불량률",
+                 f"{current_kpi['defect_rate']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    with col3:
+        st.markdown("##### 🏆 최고 작업효율")
+        st.markdown(f"**{current_kpi['best_efficiency_worker']}**")
+        delta = current_kpi['efficiency_rate'] - previous_kpi['efficiency_rate']
+        st.metric("작업효율",
+                 f"{current_kpi['efficiency_rate']:.2f}%",
+                 f"{delta:+.2f}%")
+    
+    st.markdown("---")  # 구분선 추가
+    
+    # 전체 KPI 지표
+    st.subheader("전체 KPI 지표")
+    total_kpi = calculate_kpi(filtered_data)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(f"{period_type} 생산목표달성률", f"{total_kpi[0]:.2f}%")
+    with col2:
+        st.metric(f"{period_type} 불량률", f"{total_kpi[1]:.2f}%")
+    with col3:
+        st.metric(f"{period_type} 작업효율", f"{total_kpi[2]:.2f}%")
+    
+    st.markdown("---")  # 구분선 추가
+    
+    # 작업자별 실적
+    st.subheader("작업자별 실적")
+    worker_stats = calculate_worker_stats(filtered_data)
+    st.dataframe(worker_stats, hide_index=True)
+    
+    # 일별 생산 현황 차트
+    st.subheader("일별 생산 현황")
+    daily_stats = filtered_data.groupby('날짜').agg({
+        '목표수량': 'sum',
+        '생산수량': 'sum',
+        '불량수량': 'sum'
+    }).reset_index()
+    
+    fig = create_production_chart(daily_stats, '날짜', f'{period_type} 생산 현황')
+    st.plotly_chart(fig, use_container_width=True)
 
 def sync_models_with_sheets():
     """구글 시트에서 모델차수 데이터 동기화"""
