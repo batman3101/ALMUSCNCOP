@@ -58,16 +58,22 @@ def show_login():
         submitted = st.form_submit_button("로그인")
         
         if submitted:
-            if username == st.secrets["admin_username"] and password == st.secrets["admin_password"]:
-                st.session_state.user_role = "admin"
-                st.session_state.logged_in = True
-                st.rerun()
-            elif verify_user_credentials(username, password):
-                st.session_state.user_role = "user"
-                st.session_state.logged_in = True
-                st.rerun()
-            else:
-                st.error("잘못된 아이디 또는 비밀번호입니다.")
+            try:
+                # 관리자 로그인
+                if username == "admin" and password == "admin7472":  # 하드코딩된 관리자 계정
+                    st.session_state.user_role = "admin"
+                    st.session_state.logged_in = True
+                    st.rerun()
+                # 일반 사용자 로그인
+                elif verify_user_credentials(username, password):
+                    st.session_state.user_role = "user"
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("잘못된 아이디 또는 비밀번호입니다.")
+            except Exception as e:
+                st.error("로그인 처리 중 오류가 발생했습니다.")
+                st.error(str(e))
 
 def init_admin_account():
     """관리자 계정 초기화"""
