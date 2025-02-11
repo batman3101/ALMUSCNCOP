@@ -1243,6 +1243,12 @@ def show_worker_kpi(worker_name, data):
 def verify_user_credentials(username, password):
     """사용자 로그인 검증"""
     try:
+        # 관리자 계정 확인
+        if username == "박영일" and password == "admin7472":
+            st.session_state.user_role = "admin"
+            return True
+            
+        # 일반 사용자 확인
         sheets = init_google_sheets()
         if not sheets:
             st.error("구글 시트 연결 실패")
@@ -1251,7 +1257,7 @@ def verify_user_credentials(username, password):
         try:
             result = sheets.values().get(
                 spreadsheetId=SPREADSHEET_ID,
-                range='users'
+                range='users!A1:D'  # 범위를 명확하게 지정
             ).execute()
             
             users = result.get('values', [])
@@ -1259,12 +1265,11 @@ def verify_user_credentials(username, password):
                 st.warning("등록된 사용자가 없습니다.")
                 return False
                 
-            # 사용자 데이터 확인
-            for user in users:
+            # 사용자 데이터 확인 (헤더 제외)
+            for user in users[1:]:
                 if len(user) >= 2 and user[0] == username and user[1] == password:
-                    # 권한 정보 저장
-                    if len(user) >= 4:
-                        st.session_state.user_role = user[3]
+                    # 권한 정보 저장 (있는 경우)
+                    st.session_state.user_role = user[3] if len(user) >= 4 else "user"
                     return True
             
             return False
