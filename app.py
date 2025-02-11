@@ -293,25 +293,23 @@ def create_production_chart(data, x_col, title='생산 현황'):
     
     fig = go.Figure()
     
-    # 목표수량 막대 그래프 (연한 파란색)
+    # 목표수량 막대 그래프 (하늘색)
     fig.add_trace(go.Bar(
         name='목표수량',
         x=data[x_col],
         y=data['목표수량'],
-        marker_color='rgba(173, 216, 230, 0.7)',  # 연한 파란색
-        width=0.5,
-        showlegend=True
+        marker_color='rgba(135, 206, 235, 0.6)',
+        width=0.6
     ))
     
-    # 생산수량 선 그래프 (진한 파란색)
+    # 생산수량 선 그래프 (파란색)
     fig.add_trace(go.Scatter(
         name='생산수량',
         x=data[x_col],
         y=data['생산수량'],
         mode='lines+markers',
-        line=dict(color='navy', width=2),
-        marker=dict(size=8, color='navy'),
-        showlegend=True
+        line=dict(color='rgb(31, 119, 180)', width=2),
+        marker=dict(size=8)
     ))
     
     # 불량수량 선 그래프 (빨간색)
@@ -320,74 +318,36 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['불량수량'],
         mode='lines+markers',
-        line=dict(color='red', width=2),
-        marker=dict(size=8, color='red'),
-        showlegend=True
+        line=dict(color='rgb(255, 99, 71)', width=2),
+        marker=dict(size=8)
     ))
     
     # 차트 레이아웃 설정
     fig.update_layout(
-        title=None,
         showlegend=True,
         legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1,
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
             xanchor="right",
-            x=1.1,
-            title=None
+            x=1
         ),
         plot_bgcolor='white',
         xaxis=dict(
-            title='작업자' if x_col == '작업자' else '날짜',
+            title=None,
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
-            tickangle=0,
-            tickfont=dict(size=10),
-            showline=True,
-            linewidth=1,
-            linecolor='gray'
+            tickangle=45 if x_col == '작업자' else 0
         ),
         yaxis=dict(
             title='수량',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
-            range=[0, max(data['목표수량']) * 1.1],
-            showline=True,
-            linewidth=1,
-            linecolor='gray',
             zeroline=True,
-            zerolinecolor='gray'
+            zerolinecolor='rgba(128, 128, 128, 0.2)'
         ),
-        margin=dict(l=50, r=120, t=50, b=50),  # 범례를 위한 여백 조정
-        height=400,
-        annotations=[
-            dict(
-                x=0,
-                y=max(data['목표수량']) * 1.1,
-                xref='x',
-                yref='y',
-                text='수량',
-                showarrow=False,
-                font=dict(size=10),
-                xshift=-40
-            )
-        ]
-    )
-    
-    # 그리드 스타일 설정
-    fig.update_xaxes(
-        showline=True,
-        linewidth=1,
-        linecolor='gray',
-        gridcolor='rgba(128, 128, 128, 0.2)'
-    )
-    fig.update_yaxes(
-        showline=True,
-        linewidth=1,
-        linecolor='gray',
-        gridcolor='rgba(128, 128, 128, 0.2)',
-        dtick=100  # y축 눈금 간격
+        margin=dict(l=50, r=50, t=50, b=80),
+        height=400
     )
     
     return fig
@@ -523,118 +483,56 @@ def show_best_kpi_dashboard(current_data, previous_data=None, period=""):
         st.error(f"대시보드 표시 중 오류 발생: {str(e)}")
 
 def main():
-    # 페이지 설정
-    st.set_page_config(
-        page_title="CNC 작업자 KPI 관리 시스템",
-        page_icon="🏭",
-        layout="wide"
-    )
-
-    # 세션 상태 초기화
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    if 'user_role' not in st.session_state:
-        st.session_state.user_role = None
-    if 'users' not in st.session_state:
-        st.session_state.users = pd.DataFrame(
-            columns=['이메일', '비밀번호', '이름', '권한']
-        )
-    if 'clear_users' not in st.session_state:
-        st.session_state.clear_users = False  # True에서 False로 변경
+    # 관리자 계정 초기화
+    if init_admin_account():
+        st.success("관리자 계정이 생성되었습니다.")
     
-    # 먼저 사용자 데이터 동기화
-    sync_users_with_sheets()
-    
-    # 관리자 계정이 없을 때만 초기화
-    if len(st.session_state.users) == 0:
-        init_admin_account()
-        sync_users_with_sheets()  # 관리자 계정 생성 후 다시 동기화
-    
-    # 나머지 데이터 초기화
-    if 'workers' not in st.session_state:
-        st.session_state.workers = pd.DataFrame(
-            columns=['STT', '사번', '이름', '부서', '라인번호']
-        )
-    if 'daily_records' not in st.session_state:
-        st.session_state.daily_records = pd.DataFrame(
-            columns=['날짜', '작업자', '라인번호', '모델차수', '목표수량', '생산수량', '불량수량', '특이사항']
-        )
-    if 'models' not in st.session_state:
-        st.session_state.models = pd.DataFrame(
-            columns=['STT', 'MODEL', 'PROCESS']
-        )
-
-    # 나머지 데이터 동기화
-    sync_workers_with_sheets()
-    sync_production_with_sheets()
-    sync_models_with_sheets()
-
-    # 인증 상태에 따른 화면 표시
     if not st.session_state.authenticated:
         show_login()
     else:
-        show_main_menu()
-
-def show_main_menu():
-    st.sidebar.title("CNC 작업자 KPI 관리 시스템")
-    
-    if st.session_state.user_role == 'admin':
-        menu_options = [
-            "종합 대시보드",
-            "사용자 관리",
-            "작업자 등록",
-            "일일 생산 실적 입력",
-            "일간 리포트",
-            "주간 리포트",
-            "월간 리포트",
-            "연간 리포트",
-            "데이터 백업 및 동기화"
-        ]
-    else:
-        menu_options = [
-            "종합 대시보드",
-            "작업자 등록",
-            "일일 생산 실적 입력",
-            "일간 리포트",
-            "주간 리포트",
-            "월간 리포트",
-            "연간 리포트"
-        ]
-    
-    menu = st.sidebar.selectbox("메뉴 선택", menu_options)
-    
-    # 로그아웃 버튼
-    if st.sidebar.button("로그아웃"):
-        st.session_state.authenticated = False
-        st.session_state.user_role = None
-        st.rerun()
-    
-    # 작업자 데이터 동기화
-    if len(st.session_state.workers) == 0:
-        sync_workers_with_sheets()
-    
-    # 모델차수 데이터 동기화
-    if len(st.session_state.models) == 0:
-        sync_models_with_sheets()
-    
-    if menu == "종합 대시보드":
-        show_dashboard()
-    elif menu == "사용자 관리":
-        show_user_management()
-    elif menu == "작업자 등록":
-        show_worker_registration()
-    elif menu == "일일 생산 실적 입력":
-        show_daily_production()
-    elif menu == "일간 리포트":
-        show_daily_report()
-    elif menu == "주간 리포트":
-        show_weekly_report()
-    elif menu == "월간 리포트":
-        show_monthly_report()
-    elif menu == "연간 리포트":
-        show_yearly_report()
-    elif menu == "데이터 백업 및 동기화":
-        show_data_backup()
+        # 메뉴 옵션 설정
+        if st.session_state.user_role == 'admin':
+            menu_options = [
+                "종합 대시보드",
+                "사용자 관리",
+                "작업자 등록",
+                "일일 생산 실적 입력",
+                "일간 리포트",
+                "월간 리포트",
+                "연간 리포트"
+            ]
+        else:
+            menu_options = [
+                "종합 대시보드",
+                "일일 생산 실적 입력",
+                "일간 리포트",
+                "월간 리포트",
+                "연간 리포트"
+            ]
+        
+        # 사이드바 메뉴
+        with st.sidebar:
+            menu = st.selectbox("메뉴 선택", menu_options)
+            if st.button("로그아웃"):
+                st.session_state.authenticated = False
+                st.session_state.user_role = None
+                st.rerun()
+        
+        # 선택된 메뉴에 따른 화면 표시
+        if menu == "종합 대시보드":
+            show_dashboard()
+        elif menu == "사용자 관리":
+            show_user_management()
+        elif menu == "작업자 등록":
+            show_worker_registration()
+        elif menu == "일일 생산 실적 입력":
+            show_daily_production()
+        elif menu == "일간 리포트":
+            show_daily_report()
+        elif menu == "월간 리포트":
+            show_monthly_report()
+        elif menu == "연간 리포트":
+            show_yearly_report()
 
 def show_dashboard():
     st.title("📊 종합 대시보드")
@@ -1115,95 +1013,122 @@ def show_weekly_report():
     show_report_content(weekly_data, "주간", start_of_week, end_of_week)
 
 def show_report_content(data, period_type, start_date, end_date):
-    """리포트 내용 표시"""
-    # 이전 기간 데이터 가져오기
-    prev_data = get_previous_period_data(period_type, start_date, end_date)
-    
-    # 1. 전체 KPI 표시
-    st.subheader("📊 전체 KPI")
-    total_kpi = calculate_kpi(data)
-    prev_total_kpi = calculate_kpi(prev_data)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        delta = total_kpi[0] - prev_total_kpi[0]
-        st.metric("🎯 생산목표달성률", f"{total_kpi[0]:.2f}%", f"{delta:+.2f}%")
-    with col2:
-        delta = total_kpi[1] - prev_total_kpi[1]
-        st.metric("⚠️ 불량률", f"{total_kpi[1]:.2f}%", f"{delta:+.2f}%")
-    with col3:
-        delta = total_kpi[2] - prev_total_kpi[2]
-        st.metric("⚡ 작업효율", f"{total_kpi[2]:.2f}%", f"{delta:+.2f}%")
-    
-    # 2. 최우수 작업자 KPI 표시
-    st.subheader("🏆 최우수 작업자 KPI")
-    best_workers = get_best_workers(data)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("##### 🎯 최고 목표달성")
-        st.markdown(f"**{best_workers['achievement']['name']}**")
-        delta = best_workers['achievement']['value'] - best_workers['achievement']['previous_value']
-        st.metric("달성률", 
-                 f"{best_workers['achievement']['value']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    with col2:
-        st.markdown("##### ✨ 최저 불량률")
-        st.markdown(f"**{best_workers['defect']['name']}**")
-        delta = best_workers['defect']['value'] - best_workers['defect']['previous_value']
-        st.metric("불량률",
-                 f"{best_workers['defect']['value']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    with col3:
-        st.markdown("##### 🏆 최고 작업효율")
-        st.markdown(f"**{best_workers['efficiency']['name']}**")
-        delta = best_workers['efficiency']['value'] - best_workers['efficiency']['previous_value']
-        st.metric("작업효율",
-                 f"{best_workers['efficiency']['value']:.2f}%",
-                 f"{delta:+.2f}%")
-    
-    # 3. 작업자 선택 및 KPI 표시
-    worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-    all_workers = ['전체'] + list(worker_names.values())
-    selected_worker = st.selectbox("👥 작업자 선택", options=all_workers)
-    
-    if selected_worker != '전체':
-        worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
-        worker_data = data[data['작업자'] == worker_id]
-        prev_worker_data = prev_data[prev_data['작업자'] == worker_id]
-        
-        if len(worker_data) > 0:
-            st.subheader(f"👤 {selected_worker} KPI")
-            worker_kpi = calculate_kpi(worker_data)
-            prev_worker_kpi = calculate_kpi(prev_worker_data)
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                delta = worker_kpi[0] - prev_worker_kpi[0]
-                st.metric("🎯 생산목표달성률", f"{worker_kpi[0]:.2f}%", f"{delta:+.2f}%")
-            with col2:
-                delta = worker_kpi[1] - prev_worker_kpi[1]
-                st.metric("⚠️ 불량률", f"{worker_kpi[1]:.2f}%", f"{delta:+.2f}%")
-            with col3:
-                delta = worker_kpi[2] - prev_worker_kpi[2]
-                st.metric("⚡ 작업효율", f"{worker_kpi[2]:.2f}%", f"{delta:+.2f}%")
-    
-    # 작업자별 실적 표시
-    st.subheader("📋 작업자별 실적")
-    worker_stats = calculate_worker_stats(data)
-    st.dataframe(worker_stats, hide_index=True)
-    
-    # 생산 현황 차트
-    st.subheader(f"📈 {period_type} 생산 현황")
+    """리포트 컨텐츠 표시"""
+    # 전체 KPI 섹션
+    st.markdown("### 📊 전체 KPI")
     if len(data) > 0:
-        chart_data = prepare_chart_data(data, period_type)
-        fig = create_production_chart(
-            chart_data,
-            '작업자' if period_type == '작업자별' else '날짜'
+        total_target = data['목표수량'].sum()
+        total_produced = data['생산수량'].sum()
+        total_defect = data['불량수량'].sum()
+        
+        achievement_rate = (total_produced / total_target * 100) if total_target > 0 else 0
+        defect_rate = (total_defect / total_produced * 100) if total_produced > 0 else 0
+        efficiency_rate = achievement_rate * (1 - defect_rate/100)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("생산목표달성률", f"{achievement_rate:.1f}%")
+        with col2:
+            st.metric("불량률", f"{defect_rate:.1f}%")
+        with col3:
+            st.metric("작업효율", f"{efficiency_rate:.1f}%")
+    
+    st.markdown("---")
+    
+    # 최우수 작업자 KPI 섹션
+    st.markdown("### 🏆 최우수 작업자 KPI")
+    if len(data) > 0:
+        worker_stats = data.groupby('작업자').agg({
+            '목표수량': 'sum',
+            '생산수량': 'sum',
+            '불량수량': 'sum'
+        }).reset_index()
+        
+        # 작업자 이름 매핑
+        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+        worker_stats['작업자명'] = worker_stats['작업자'].map(worker_names)
+        
+        # KPI 계산
+        worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
+        worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
+        worker_stats['작업효율'] = (worker_stats['달성률'] * (1 - worker_stats['불량률']/100)).round(1)
+        
+        # 최우수 작업자 선정
+        best_achievement = worker_stats.loc[worker_stats['달성률'].idxmax()]
+        best_quality = worker_stats.loc[worker_stats['불량률'].idxmin()]
+        best_efficiency = worker_stats.loc[worker_stats['작업효율'].idxmax()]
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("최고 목표달성", 
+                     best_achievement['작업자명'],
+                     f"{best_achievement['달성률']:.1f}%")
+        with col2:
+            st.metric("최저 불량률",
+                     best_quality['작업자명'],
+                     f"{best_quality['불량률']:.1f}%")
+        with col3:
+            st.metric("최고 작업효율",
+                     best_efficiency['작업자명'],
+                     f"{best_efficiency['작업효율']:.1f}%")
+    
+    st.markdown("---")
+    
+    # 생산 현황 섹션
+    st.markdown("### 📈 생산 현황")
+    if len(data) > 0:
+        # 작업자별 데이터 집계
+        production_data = data.groupby('작업자').agg({
+            '목표수량': 'sum',
+            '생산수량': 'sum',
+            '불량수량': 'sum'
+        }).reset_index()
+        
+        # 작업자 이름 매핑
+        production_data['작업자'] = production_data['작업자'].map(worker_names)
+        
+        # 차트 생성
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name='목표수량',
+            x=production_data['작업자'],
+            y=production_data['목표수량'],
+            marker_color='skyblue'
+        ))
+        fig.add_trace(go.Bar(
+            name='생산수량',
+            x=production_data['작업자'],
+            y=production_data['생산수량'],
+            marker_color='blue'
+        ))
+        fig.add_trace(go.Bar(
+            name='불량수량',
+            x=production_data['작업자'],
+            y=production_data['불량수량'],
+            marker_color='red'
+        ))
+        
+        fig.update_layout(
+            title='작업자별 생산 현황',
+            barmode='group',
+            height=400
         )
+        
         st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # 작업자별 실적 섹션
+    st.markdown("### 📋 작업자별 실적")
+    if len(data) > 0:
+        # 작업자별 실적 표시
+        worker_stats['작업자'] = worker_stats['작업자명']
+        worker_stats = worker_stats[[
+            '작업자', '목표수량', '생산수량', '불량수량', '달성률', '불량률', '작업효율'
+        ]]
+        st.dataframe(worker_stats, hide_index=True)
+    else:
+        st.info("표시할 데이터가 없습니다.")
 
 def sync_models_with_sheets():
     """구글 시트에서 모델차수 데이터 동기화"""
@@ -1232,18 +1157,15 @@ def sync_users_with_sheets():
     """구글 시트에서 사용자 데이터 동기화"""
     try:
         sheets = init_google_sheets()
-        
-        # 구글 시트에서 사용자 데이터 읽기
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='user!A2:D'  # A2부터 D열까지 (이메일, 비밀번호, 이름, 권한)
+            range='users!A2:D'  # A2부터 D열까지 (이메일, 비밀번호, 이름, 권한)
         ).execute()
         
         values = result.get('values', [])
         if values:
-            # 구글 시트 데이터를 DataFrame으로 변환
+            # DataFrame 생성
             users_df = pd.DataFrame(values, columns=['이메일', '비밀번호', '이름', '권한'])
-            # 세션 스테이트 업데이트
             st.session_state.users = users_df
             return True
         return False
@@ -1254,33 +1176,28 @@ def sync_users_with_sheets():
 def backup_users_to_sheets():
     """사용자 데이터를 구글 시트에 백업"""
     try:
-        if len(st.session_state.users) > 0:
-            sheets = init_google_sheets()
-            
-            # DataFrame을 리스트로 변환
-            values = [['이메일', '비밀번호', '이름', '권한']]  # 헤더 추가
-            values.extend(st.session_state.users.values.tolist())
-            
-            # 기존 데이터 삭제
-            sheets.values().clear(
-                spreadsheetId=SPREADSHEET_ID,
-                range='user!A1:D'
-            ).execute()
-            
-            # 새 데이터 쓰기
-            body = {
-                'values': values
-            }
-            
-            sheets.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range='user!A1',
-                valueInputOption='RAW',
-                body=body
-            ).execute()
-            
-            return True
-        return False
+        sheets = init_google_sheets()
+        
+        # DataFrame을 리스트로 변환
+        values = [['이메일', '비밀번호', '이름', '권한']]  # 헤더 추가
+        values.extend(st.session_state.users.values.tolist())
+        
+        # 기존 데이터 삭제
+        sheets.values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A1:D'
+        ).execute()
+        
+        # 새 데이터 쓰기
+        body = {'values': values}
+        sheets.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A1',
+            valueInputOption='RAW',
+            body=body
+        ).execute()
+        
+        return True
     except Exception as e:
         st.error(f"사용자 데이터 백업 중 오류 발생: {str(e)}")
         return False
