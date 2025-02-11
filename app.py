@@ -96,7 +96,7 @@ def init_admin_account():
         sheets = init_google_sheets()
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='workers!A2:C'
+            range='workers!A:C'  # 범위 수정: A2:C -> A:C
         ).execute()
         
         values = result.get('values', [])
@@ -104,8 +104,8 @@ def init_admin_account():
             st.error("작업자 정보를 불러올 수 없습니다.")
             return False
             
-        # DataFrame 생성
-        workers_df = pd.DataFrame(values, columns=['사번', '이름', '직책'])
+        # 헤더를 제외한 데이터만 사용
+        workers_df = pd.DataFrame(values[1:], columns=['사번', '이름', '직책'])  # 첫 번째 행(헤더) 제외
         
         # 세션 스테이트에 저장
         st.session_state.workers = workers_df
