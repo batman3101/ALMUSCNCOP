@@ -290,31 +290,31 @@ def create_production_chart(data, worker_col, title):
     """작업자별 생산 현황 차트 생성"""
     fig = go.Figure()
     
-    # 목표수량 바 차트
+    # 목표수량 바 차트 (하늘색)
     fig.add_trace(go.Bar(
         name='목표수량',
         x=data[worker_col],
         y=data['목표수량'],
-        marker_color='rgb(158,202,225)',
+        marker_color='rgba(158,202,225,0.8)',
         opacity=0.8
     ))
     
-    # 생산수량 바 차트
-    fig.add_trace(go.Bar(
+    # 생산수량 꺾은선 그래프 (파란색)
+    fig.add_trace(go.Scatter(
         name='생산수량',
         x=data[worker_col],
         y=data['생산수량'],
-        marker_color='rgb(94,158,217)',
-        opacity=0.8
+        line=dict(color='rgb(49,130,189)', width=2),
+        mode='lines+markers'
     ))
     
-    # 불량수량 바 차트
-    fig.add_trace(go.Bar(
+    # 불량수량 꺾은선 그래프 (빨간색)
+    fig.add_trace(go.Scatter(
         name='불량수량',
         x=data[worker_col],
         y=data['불량수량'],
-        marker_color='rgb(255,100,102)',
-        opacity=0.8
+        line=dict(color='rgb(255,0,0)', width=2),
+        mode='lines+markers'
     ))
 
     # 차트 레이아웃 설정
@@ -322,11 +322,19 @@ def create_production_chart(data, worker_col, title):
         title=title,
         xaxis_title='작업자',
         yaxis_title='수량',
-        barmode='group',
         showlegend=True,
         height=500,
         width=None,  # 자동 조정
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=50, r=50, t=50, b=50),
+        xaxis=dict(
+            tickangle=0,
+            type='category'
+        ),
+        yaxis=dict(
+            gridcolor='rgba(0,0,0,0.1)',
+            zerolinecolor='rgba(0,0,0,0.1)'
+        ),
+        plot_bgcolor='white'
     )
     
     return fig
@@ -1506,6 +1514,8 @@ def show_report_template(data, period_type, start_date, end_date):
     
     # 작업자별 생산 현황 차트로 수정
     st.subheader("작업자별 생산 현황")
+    
+    # 작업자 이름으로 그룹화
     worker_production = data.groupby('작업자').agg({
         '목표수량': 'sum',
         '생산수량': 'sum',
