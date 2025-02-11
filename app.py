@@ -13,7 +13,7 @@ import numpy as np
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # 구글 시트 ID 설정
-SPREADSHEET_ID = '12l3VeNoTvBQwhKZ29-VqWElEt_vkXEP1wcr73v6ODFs'  # URL에서 ID 부분만 추출
+SPREADSHEET_ID = "1213veNoTvBQwhKZ29-VgWEIEt_vkXEP1wcr73v6ODFs"
 
 # 세션 스테이트 초기화
 if 'authenticated' not in st.session_state:
@@ -1248,8 +1248,8 @@ def verify_user_credentials(username, password):
             
         try:
             result = sheets.values().get(
-                spreadsheetId=st.secrets["spreadsheet_id"],
-                range='users'  # 시트 전체를 가져오도록 수정
+                spreadsheetId=SPREADSHEET_ID,  # 직접 ID 사용
+                range='users'
             ).execute()
             
             users = result.get('values', [])
