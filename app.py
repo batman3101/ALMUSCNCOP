@@ -458,6 +458,12 @@ def main():
     
     # 관리자 계정 초기화
     if init_admin_account():
+        # 관리자 계정 등록
+        if register_new_user("zetooo1972@gmail.com", "admin7472", "관리자", "admin"):
+            st.success("관리자 계정이 성공적으로 등록되었습니다.")
+        else:
+            st.error("관리자 계정 등록에 실패했습니다.")
+        
         # 사이드바 메뉴
         if st.session_state.user_role == "admin":
             menu = st.sidebar.selectbox(
@@ -762,10 +768,11 @@ def show_user_management():
         new_username = st.text_input("아이디")
         new_password = st.text_input("비밀번호", type="password")
         new_name = st.text_input("이름")
+        new_role = st.selectbox("권한", options=["admin", "user"])
         submitted = st.form_submit_button("등록")
         
         if submitted:
-            if register_new_user(new_username, new_password, new_name):
+            if register_new_user(new_username, new_password, new_name, new_role):
                 st.success("사용자가 등록되었습니다.")
                 st.rerun()
             else:
@@ -1236,11 +1243,6 @@ def show_worker_kpi(worker_name, data):
 def verify_user_credentials(username, password):
     """사용자 로그인 검증"""
     try:
-        # 관리자 계정 확인
-        if username == "admin" and password == "admin7472":
-            return True
-            
-        # 일반 사용자 확인
         sheets = init_google_sheets()
         if not sheets:
             st.error("구글 시트 연결 실패")
@@ -1248,18 +1250,21 @@ def verify_user_credentials(username, password):
             
         try:
             result = sheets.values().get(
-                spreadsheetId=SPREADSHEET_ID,  # 직접 ID 사용
+                spreadsheetId=SPREADSHEET_ID,
                 range='users'
             ).execute()
             
             users = result.get('values', [])
-            if not users:  # 데이터가 없는 경우
+            if not users:
                 st.warning("등록된 사용자가 없습니다.")
                 return False
                 
             # 사용자 데이터 확인
             for user in users:
                 if len(user) >= 2 and user[0] == username and user[1] == password:
+                    # 권한 정보 저장
+                    if len(user) >= 4:
+                        st.session_state.user_role = user[3]
                     return True
             
             return False
@@ -1313,17 +1318,27 @@ def get_users_from_sheets():
         st.error(f"사용자 목록 조회 중 오류 발생: {str(e)}")
         return pd.DataFrame(columns=['아이디', '비밀번호', '이름'])
 
-def register_new_user(username, password, name):
+def register_new_user(username, password, name, role="user"):
     """새 사용자 등록"""
     try:
         sheets = init_google_sheets()
-        sheets.values().append(
+        if not sheets:
+            st.error("구글 시트 연결 실패")
+            return False
+            
+        # 새 사용자 추가
+        result = sheets.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range='users!A2',
+            range='users!A2',  # A2부터 시작 (헤더 다음 행)
             valueInputOption='USER_ENTERED',
-            body={'values': [[username, password, name]]}
+            insertDataOption='INSERT_ROWS',
+            body={
+                'values': [[username, password, name, role]]
+            }
         ).execute()
+        
         return True
+        
     except Exception as e:
         st.error(f"사용자 등록 중 오류 발생: {str(e)}")
         return False
