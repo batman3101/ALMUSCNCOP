@@ -1224,17 +1224,27 @@ def show_worker_kpi(worker_name, data):
 def verify_user_credentials(username, password):
     """사용자 로그인 검증"""
     try:
+        # 관리자 계정 확인
+        if username == "admin" and password == "admin7472":
+            return True
+            
+        # 일반 사용자 확인
         sheets = init_google_sheets()
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range='users!A2:C'
+            range='users!A:C'  # 범위를 'A:C'로 수정
         ).execute()
         
         users = result.get('values', [])
-        for user in users:
-            if user[0] == username and user[1] == password:
+        if not users:  # 데이터가 없는 경우
+            return False
+            
+        # 헤더를 제외한 사용자 데이터 확인
+        for user in users[1:]:  # 첫 번째 행(헤더) 제외
+            if len(user) >= 2 and user[0] == username and user[1] == password:
                 return True
         return False
+        
     except Exception as e:
         st.error(f"사용자 검증 중 오류 발생: {str(e)}")
         return False
