@@ -286,50 +286,47 @@ def show_data_backup():
         st.subheader("현재 저장된 생산 데이터")
         st.dataframe(st.session_state.daily_records, hide_index=True)
 
-def create_production_chart(data, x_col, title='생산 현황'):
-    """일관된 생산 현황 차트 생성 함수"""
+def create_production_chart(data, worker_col, title):
+    """작업자별 생산 현황 차트 생성"""
     fig = go.Figure()
     
-    # 목표수량 - 하늘색 막대
+    # 목표수량 바 차트
     fig.add_trace(go.Bar(
         name='목표수량',
-        x=data[x_col],
+        x=data[worker_col],
         y=data['목표수량'],
-        marker_color='skyblue'
+        marker_color='rgb(158,202,225)',
+        opacity=0.8
     ))
     
-    # 생산수량 - 파란색 선
-    fig.add_trace(go.Scatter(
+    # 생산수량 바 차트
+    fig.add_trace(go.Bar(
         name='생산수량',
-        x=data[x_col],
+        x=data[worker_col],
         y=data['생산수량'],
-        mode='lines+markers',
-        line=dict(color='blue')
+        marker_color='rgb(94,158,217)',
+        opacity=0.8
     ))
     
-    # 불량수량 - 빨간색 선
-    fig.add_trace(go.Scatter(
+    # 불량수량 바 차트
+    fig.add_trace(go.Bar(
         name='불량수량',
-        x=data[x_col],
+        x=data[worker_col],
         y=data['불량수량'],
-        mode='lines+markers',
-        line=dict(color='red')
+        marker_color='rgb(255,100,102)',
+        opacity=0.8
     ))
-    
+
+    # 차트 레이아웃 설정
     fig.update_layout(
         title=title,
-        xaxis_title=x_col,
+        xaxis_title='작업자',
         yaxis_title='수량',
         barmode='group',
-        height=400,
         showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+        height=500,
+        width=None,  # 자동 조정
+        margin=dict(l=50, r=50, t=50, b=50)
     )
     
     return fig
@@ -1432,7 +1429,7 @@ def show_worker_report():
         st.info("등록된 생산 실적이 없습니다.")
 
 def show_report_template(data, period_type, start_date, end_date):
-    """리포트 공통 템플릿"""
+    """리포트 템플릿"""
     st.title(f"📊 {period_type} 리포트")
     
     # 작업자 선택 드롭다운
@@ -1506,6 +1503,21 @@ def show_report_template(data, period_type, start_date, end_date):
     
     fig = create_production_chart(daily_stats, '날짜', f'{period_type} 생산 현황')
     st.plotly_chart(fig)
+    
+    # 작업자별 생산 현황 차트로 수정
+    st.subheader("작업자별 생산 현황")
+    worker_production = data.groupby('작업자').agg({
+        '목표수량': 'sum',
+        '생산수량': 'sum',
+        '불량수량': 'sum'
+    }).reset_index()
+    
+    fig = create_production_chart(
+        worker_production, 
+        '작업자', 
+        f'{period_type} 작업자별 생산 현황'
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 def calculate_worker_stats(data):
     """작업자별 통계 계산"""
