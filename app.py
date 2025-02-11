@@ -1244,42 +1244,40 @@ def verify_user_credentials(username, password):
     """사용자 로그인 검증"""
     try:
         # 관리자 계정 확인
-        if username == "박영일" and password == "admin7472":
+        if username == "zetooo1972@gmail.com" and password == "admin7472":
             st.session_state.user_role = "admin"
             return True
             
-        # 일반 사용자 확인
         sheets = init_google_sheets()
         if not sheets:
-            st.error("구글 시트 연결 실패")
             return False
             
+        # 스프레드시트 ID 직접 지정
+        SPREADSHEET_ID = "1213veNoTvBQwhKZ29-VgWEIEt_vkXEP1wcr73v6ODFs"
+        
         try:
-            result = sheets.values().get(
+            # 범위를 더 구체적으로 지정
+            sheet = sheets.values().get(
                 spreadsheetId=SPREADSHEET_ID,
-                range='users!A1:D'  # 범위를 명확하게 지정
+                range='users!A2:D50'  # A2부터 D50까지의 범위
             ).execute()
             
-            users = result.get('values', [])
-            if not users:
-                st.warning("등록된 사용자가 없습니다.")
-                return False
-                
-            # 사용자 데이터 확인 (헤더 제외)
-            for user in users[1:]:
-                if len(user) >= 2 and user[0] == username and user[1] == password:
-                    # 권한 정보 저장 (있는 경우)
-                    st.session_state.user_role = user[3] if len(user) >= 4 else "user"
-                    return True
+            values = sheet.get('values', [])
             
+            # 사용자 확인
+            for row in values:
+                if len(row) >= 2 and row[0] == username and row[1] == password:
+                    st.session_state.user_role = row[3] if len(row) >= 4 else "user"
+                    return True
+                    
             return False
             
         except Exception as e:
-            st.error(f"사용자 데이터 조회 중 오류: {str(e)}")
+            st.error(f"데이터 조회 오류: {str(e)}")
             return False
             
     except Exception as e:
-        st.error(f"사용자 검증 중 오류 발생: {str(e)}")
+        st.error(f"인증 오류: {str(e)}")
         return False
 
 def update_production_record(record_data):
