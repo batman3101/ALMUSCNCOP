@@ -1592,9 +1592,9 @@ def get_best_workers(data):
     """최우수 작업자 KPI 계산"""
     if len(data) == 0:
         return {
-            'achievement': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0},
-            'defect': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0},
-            'efficiency': {'name': 'N/A', 'value': 0.0, 'previous_value': 0.0}
+            'achievement': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0},
+            'defect': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0},
+            'efficiency': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0}
         }
     
     # 작업자별 KPI 계산
@@ -1604,21 +1604,22 @@ def get_best_workers(data):
         '불량수량': 'sum'
     }).reset_index()
     
-    # 작업자 정보 가져오기
-    workers_df = st.session_state.workers.copy()
-    worker_stats = worker_stats.merge(
-        workers_df[['사번', '이름']], 
-        left_on='작업자', 
-        right_on='사번', 
-        how='left'
-    )
+    # 작업자 정보 매핑
+    workers_dict = st.session_state.workers.set_index('사번')['이름'].to_dict()
+    worker_stats['이름'] = worker_stats['작업자'].map(lambda x: workers_dict.get(x, f'작업자{x}'))
     
-    # 달성률 계산
+    # KPI 계산
     worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2)
-    # 불량률 계산
     worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(2)
-    # 작업효율 계산
     worker_stats['작업효율'] = (worker_stats['달성률'] * (1 - worker_stats['불량률']/100)).round(2)
+    
+    # 데이터 검증
+    if worker_stats.empty:
+        return {
+            'achievement': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0},
+            'defect': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0},
+            'efficiency': {'name': '데이터 없음', 'value': 0.0, 'previous_value': 0.0}
+        }
     
     # 최우수 작업자 선정
     best_achievement = worker_stats.loc[worker_stats['달성률'].idxmax()]
