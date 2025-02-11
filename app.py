@@ -299,7 +299,8 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['목표수량'],
         marker_color='rgba(173, 216, 230, 0.7)',  # 연한 파란색
-        width=0.6
+        width=0.5,
+        showlegend=True
     ))
     
     # 생산수량 선 그래프 (진한 파란색)
@@ -308,8 +309,9 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['생산수량'],
         mode='lines+markers',
-        line=dict(color='rgb(0, 0, 139)', width=2),
-        marker=dict(size=8)
+        line=dict(color='navy', width=2),
+        marker=dict(size=8, color='navy'),
+        showlegend=True
     ))
     
     # 불량수량 선 그래프 (빨간색)
@@ -318,35 +320,74 @@ def create_production_chart(data, x_col, title='생산 현황'):
         x=data[x_col],
         y=data['불량수량'],
         mode='lines+markers',
-        line=dict(color='rgb(255, 0, 0)', width=2),
-        marker=dict(size=8)
+        line=dict(color='red', width=2),
+        marker=dict(size=8, color='red'),
+        showlegend=True
     ))
     
     # 차트 레이아웃 설정
     fig.update_layout(
+        title=None,
         showlegend=True,
         legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            orientation="v",
+            yanchor="top",
+            y=1,
             xanchor="right",
-            x=1
+            x=1.1,
+            title=None
         ),
         plot_bgcolor='white',
         xaxis=dict(
-            title=None,
+            title='작업자' if x_col == '작업자' else '날짜',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
-            tickangle=45 if x_col == '작업자' else 0
+            tickangle=0,
+            tickfont=dict(size=10),
+            showline=True,
+            linewidth=1,
+            linecolor='gray'
         ),
         yaxis=dict(
             title='수량',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
-            range=[0, max(data['목표수량']) * 1.1]  # y축 범위 설정
+            range=[0, max(data['목표수량']) * 1.1],
+            showline=True,
+            linewidth=1,
+            linecolor='gray',
+            zeroline=True,
+            zerolinecolor='gray'
         ),
-        margin=dict(l=50, r=50, t=50, b=50),
-        height=400
+        margin=dict(l=50, r=120, t=50, b=50),  # 범례를 위한 여백 조정
+        height=400,
+        annotations=[
+            dict(
+                x=0,
+                y=max(data['목표수량']) * 1.1,
+                xref='x',
+                yref='y',
+                text='수량',
+                showarrow=False,
+                font=dict(size=10),
+                xshift=-40
+            )
+        ]
+    )
+    
+    # 그리드 스타일 설정
+    fig.update_xaxes(
+        showline=True,
+        linewidth=1,
+        linecolor='gray',
+        gridcolor='rgba(128, 128, 128, 0.2)'
+    )
+    fig.update_yaxes(
+        showline=True,
+        linewidth=1,
+        linecolor='gray',
+        gridcolor='rgba(128, 128, 128, 0.2)',
+        dtick=100  # y축 눈금 간격
     )
     
     return fig
@@ -1649,9 +1690,9 @@ def prepare_chart_data(data, period_type):
             '불량수량': 'sum'
         }).reset_index()
         
-        # 작업자 사번을 이름으로 변환
-        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-        chart_data['작업자'] = chart_data['작업자'].map(worker_names)
+        # 작업자 이름으로 변환
+        workers_dict = st.session_state.workers.set_index('사번')['이름'].to_dict()
+        chart_data['작업자'] = chart_data['작업자'].map(lambda x: workers_dict.get(x, x))
         
     else:
         # 날짜별 데이터 집계
