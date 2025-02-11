@@ -38,29 +38,19 @@ if 'models' not in st.session_state:
 def init_google_sheets():
     """구글 시트 API 초기화"""
     try:
-        credentials = {
-            "type": "service_account",
-            "project_id": st.secrets["gcp_service_account"]["project_id"],
-            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-            "private_key": st.secrets["gcp_service_account"]["private_key"],
-            "client_email": st.secrets["gcp_service_account"]["client_email"],
-            "client_id": st.secrets["gcp_service_account"]["client_id"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
-        }
-        
-        creds = service_account.Credentials.from_service_account_info(
-            credentials,
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        scope = ['https://spreadsheets.google.com/feeds',
+                 'https://www.googleapis.com/auth/drive']
+                 
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=scope
         )
         
-        service = build('sheets', 'v4', credentials=creds)
+        service = build('sheets', 'v4', credentials=credentials)
         return service.spreadsheets()
         
     except Exception as e:
-        st.error(f"구글 시트 초기화 중 오류 발생: {str(e)}")
+        st.error(f"구글 시트 초기화 오류: {str(e)}")
         return None
 
 def show_login():
@@ -1241,41 +1231,28 @@ def show_worker_kpi(worker_name, data):
             st.metric("🏆 작업효율", f"{작업효율}%")
 
 def verify_user_credentials(username, password):
-    """사용자 로그인 검증"""
+    """사용자 인증"""
+    if username == "zetooo1972@gmail.com" and password == "admin7472":
+        return True
+        
     try:
-        # 관리자 계정 확인
-        if username == "zetooo1972@gmail.com" and password == "admin7472":
-            st.session_state.user_role = "admin"
-            return True
-            
         sheets = init_google_sheets()
         if not sheets:
             return False
             
-        # 스프레드시트 ID 직접 지정
-        SPREADSHEET_ID = "1213veNoTvBQwhKZ29-VgWEIEt_vkXEP1wcr73v6ODFs"
+        result = sheets.values().get(
+            spreadsheetId="1213veNoTvBQwhKZ29-VgWEIEt_vkXEP1wcr73v6ODFs",
+            range="users"
+        ).execute()
         
-        try:
-            # 범위를 더 구체적으로 지정
-            sheet = sheets.values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range='users!A2:D50'  # A2부터 D50까지의 범위
-            ).execute()
-            
-            values = sheet.get('values', [])
-            
-            # 사용자 확인
-            for row in values:
-                if len(row) >= 2 and row[0] == username and row[1] == password:
-                    st.session_state.user_role = row[3] if len(row) >= 4 else "user"
-                    return True
-                    
-            return False
-            
-        except Exception as e:
-            st.error(f"데이터 조회 오류: {str(e)}")
-            return False
-            
+        values = result.get('values', [])
+        for row in values:
+            if row[0] == username and row[1] == password:
+                st.session_state.user_role = row[3] if len(row) >= 4 else "user"
+                return True
+                
+        return False
+        
     except Exception as e:
         st.error(f"인증 오류: {str(e)}")
         return False
