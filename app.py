@@ -290,55 +290,70 @@ def create_production_chart(data, worker_col, title):
     """작업자별 생산 현황 차트 생성"""
     fig = go.Figure()
     
-    # 목표수량 바 차트 (하늘색)
+    # 목표수량 바 차트 (연한 파란색)
     fig.add_trace(go.Bar(
         name='목표수량',
-        x=data[worker_col],  # 작업자명으로 변경
+        x=data[worker_col],
         y=data['목표수량'],
-        marker_color='rgba(158,202,225,0.8)',
-        opacity=0.8
+        marker_color='rgba(173,216,230,0.7)',  # 더 연한 파란색으로 수정
+        width=0.5  # 막대 너비 조정
     ))
     
-    # 생산수량 꺾은선 그래프 (파란색)
+    # 생산수량 꺾은선 그래프 (진한 파란색)
     fig.add_trace(go.Scatter(
         name='생산수량',
-        x=data[worker_col],  # 작업자명으로 변경
+        x=data[worker_col],
         y=data['생산수량'],
-        line=dict(color='rgb(49,130,189)', width=2),
-        mode='lines+markers'
+        line=dict(color='rgb(0,0,255)', width=3),  # 선 색상과 굵기 조정
+        mode='lines+markers',
+        marker=dict(size=8)  # 마커 크기 조정
     ))
     
     # 불량수량 꺾은선 그래프 (빨간색)
     fig.add_trace(go.Scatter(
         name='불량수량',
-        x=data[worker_col],  # 작업자명으로 변경
+        x=data[worker_col],
         y=data['불량수량'],
-        line=dict(color='rgb(255,0,0)', width=2),
-        mode='lines+markers'
+        line=dict(color='rgb(255,0,0)', width=3),  # 선 굵기 조정
+        mode='lines+markers',
+        marker=dict(size=8)  # 마커 크기 조정
     ))
 
     # 차트 레이아웃 설정
     fig.update_layout(
         title=title,
-        xaxis_title='작업자',
-        yaxis_title='수량',
+        xaxis_title=None,  # x축 제목 제거
+        yaxis_title=None,  # y축 제목 제거
         showlegend=True,
-        height=500,
+        legend=dict(
+            orientation="h",  # 범례를 수평으로 변경
+            yanchor="bottom",
+            y=1.02,  # 범례 위치 조정
+            xanchor="right",
+            x=1
+        ),
+        height=400,  # 차트 높이 조정
         width=None,
         margin=dict(l=50, r=50, t=50, b=50),
         xaxis=dict(
-            tickangle=0,
-            type='category',
-            tickmode='array',
-            ticktext=data[worker_col],  # 작업자명 표시
-            tickvals=data[worker_col]
+            showgrid=True,
+            gridcolor='rgba(0,0,0,0.1)',
+            gridwidth=1,
+            tickangle=0
         ),
         yaxis=dict(
+            showgrid=True,
             gridcolor='rgba(0,0,0,0.1)',
+            gridwidth=1,
             zerolinecolor='rgba(0,0,0,0.1)'
         ),
-        plot_bgcolor='white'
+        plot_bgcolor='white',  # 배경색 흰색으로 설정
+        paper_bgcolor='white'  # 차트 바깥 배경색 흰색으로 설정
     )
+    
+    # y축 범위 설정 (0부터 시작)
+    max_value = max(data['목표수량'].max(), data['생산수량'].max(), data['불량수량'].max())
+    fig.update_yaxes(range=[0, max_value * 1.1])  # 최대값의 110%까지 표시
     
     return fig
 
