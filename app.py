@@ -1604,9 +1604,9 @@ def get_best_workers(data):
         '불량수량': 'sum'
     }).reset_index()
     
-    # 작업자 정보 매핑
+    # 작업자 정보 매핑 - 사번이 없는 경우에도 원래 이름 사용
     workers_dict = st.session_state.workers.set_index('사번')['이름'].to_dict()
-    worker_stats['이름'] = worker_stats['작업자'].map(lambda x: workers_dict.get(x, f'작업자{x}'))
+    worker_stats['이름'] = worker_stats['작업자'].map(lambda x: workers_dict.get(x, x))
     
     # KPI 계산
     worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(2)
