@@ -286,40 +286,48 @@ def show_data_backup():
         st.subheader("현재 저장된 생산 데이터")
         st.dataframe(st.session_state.daily_records, hide_index=True)
 
-def create_production_chart(data, x_col):
+def create_production_chart(data, x_col, title='생산 현황'):
     """생산 현황 차트 생성"""
+    # 데이터 정렬
+    data = data.sort_values(x_col)
+    
+    # 차트 생성
     fig = go.Figure()
     
-    # 목표수량 - 하늘색 막대
+    # 목표수량 막대 그래프 (하늘색)
     fig.add_trace(go.Bar(
         name='목표수량',
         x=data[x_col],
         y=data['목표수량'],
-        marker_color='rgba(135, 206, 235, 0.7)',
-        width=0.5
+        marker_color='rgba(135, 206, 235, 0.7)',  # 하늘색
+        hovertemplate='목표수량: %{y}<extra></extra>'
     ))
     
-    # 생산수량 - 파란색 선
+    # 생산수량 선 그래프 (진한 파란색)
     fig.add_trace(go.Scatter(
         name='생산수량',
         x=data[x_col],
         y=data['생산수량'],
         mode='lines+markers',
-        line=dict(color='rgb(0, 0, 139)', width=2),
-        marker=dict(size=8)
+        line=dict(color='rgb(0, 0, 139)', width=2),  # 진한 파란색
+        marker=dict(size=8),
+        hovertemplate='생산수량: %{y}<extra></extra>'
     ))
     
-    # 불량수량 - 빨간색 선
+    # 불량수량 선 그래프 (빨간색)
     fig.add_trace(go.Scatter(
         name='불량수량',
         x=data[x_col],
         y=data['불량수량'],
         mode='lines+markers',
-        line=dict(color='rgb(255, 0, 0)', width=2),
-        marker=dict(size=8)
+        line=dict(color='rgb(255, 0, 0)', width=2),  # 빨간색
+        marker=dict(size=8),
+        hovertemplate='불량수량: %{y}<extra></extra>'
     ))
     
+    # 차트 레이아웃 설정
     fig.update_layout(
+        title=title,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -330,11 +338,13 @@ def create_production_chart(data, x_col):
         ),
         plot_bgcolor='white',
         xaxis=dict(
+            title=x_col,
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             tickangle=45 if x_col == '작업자' else 0
         ),
         yaxis=dict(
+            title='수량',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             zeroline=True,
@@ -1154,9 +1164,8 @@ def show_report_content(data, period_type, start_date, end_date):
     if len(data) > 0:
         chart_data = prepare_chart_data(data, period_type)
         fig = create_production_chart(
-            chart_data, 
-            '작업자' if period_type == '작업자별' else '날짜',
-            f"{period_type} 생산 현황"
+            chart_data,
+            '작업자' if period_type == '작업자별' else '날짜'
         )
         st.plotly_chart(fig, use_container_width=True)
 
