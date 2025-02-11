@@ -907,109 +907,31 @@ def show_worker_registration():
                 st.error(f"구글 시트 업데이트 중 오류 발생: {str(e)}")
 
 def show_monthly_report():
-    st.title("📈 월간 리포트")
+    """월간 리포트"""
+    st.title("📊 월간 리포트")
     
-    if len(st.session_state.daily_records) > 0:
-        # 연월 선택
-        col1, col2 = st.columns(2)
-        with col1:
-            current_date = datetime.now()
-            year = st.selectbox(
-                "연도 선택",
-                options=range(2024, 2020, -1),
-                index=0
-            )
-        with col2:
-            month = st.selectbox(
-                "월 선택",
-                options=range(1, 13),
-                index=current_date.month-1
-            )
-        
-        # 선택된 월의 데이터 필터링
-        date_mask = (
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year
-        ) & (
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month
-        )
-        monthly_data = st.session_state.daily_records[date_mask].copy()
-        
-        if len(monthly_data) > 0:
-            # 월간 KPI 계산
-            total_target = monthly_data['목표수량'].sum()
-            total_produced = monthly_data['생산수량'].sum()
-            total_defect = monthly_data['불량수량'].sum()
-            
-            achievement_rate = (total_produced / total_target * 100) if total_target > 0 else 0
-            defect_rate = (total_defect / total_produced * 100) if total_produced > 0 else 0
-            efficiency_rate = achievement_rate * (1 - defect_rate/100)
-            
-            # KPI 지표 표시
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("🎯 최고 목표달성", f"{achievement_rate:.2f}%")
-            with col2:
-                st.metric("✨ 최저 불량률", f"{defect_rate:.2f}%")
-            with col3:
-                st.metric("🏆 최고 작업효율", f"{efficiency_rate:.2f}%")
-            
-            st.divider()
-            
-            # 작업자별 실적 표시
-            st.subheader("작업자별 실적")
-            
-            # 작업자별 집계
-            worker_stats = monthly_data.groupby('작업자').agg({
-                '목표수량': 'sum',
-                '생산수량': 'sum',
-                '불량수량': 'sum'
-            }).reset_index()
-            
-            # 달성률과 불량률 계산
-            worker_stats['달성률'] = (worker_stats['생산수량'] / worker_stats['목표수량'] * 100).round(1)
-            worker_stats['불량률'] = (worker_stats['불량수량'] / worker_stats['생산수량'] * 100).round(1)
-            
-            # 데이터 표시
-            st.dataframe(
-                worker_stats,
-                column_config={
-                    '달성률': st.column_config.NumberColumn(
-                        '달성률(%)',
-                        format="%.1f%%"
-                    ),
-                    '불량률': st.column_config.NumberColumn(
-                        '불량률(%)',
-                        format="%.1f%%"
-                    )
-                },
-                hide_index=True
-            )
-            
-            # 차트 표시
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                name='생산수량',
-                x=worker_stats['작업자'],
-                y=worker_stats['생산수량'],
-                text=worker_stats['생산수량'],
-                textposition='auto',
-            ))
-            fig.add_trace(go.Bar(
-                name='불량수량',
-                x=worker_stats['작업자'],
-                y=worker_stats['불량수량'],
-                text=worker_stats['불량수량'],
-                textposition='auto',
-            ))
-            fig.update_layout(
-                title=f'{year}년 {month}월 작업자별 생산/불량 현황',
-                barmode='group'
-            )
-            st.plotly_chart(fig)
-        else:
-            st.info(f"{year}년 {month}월의 생산 데이터가 없습니다.")
-    else:
-        st.info("등록된 생산 실적이 없습니다.")
+    # 연월 선택
+    col1, col2 = st.columns(2)
+    with col1:
+        year = st.selectbox("연도 선택", 
+                           options=range(2030, 2024, -1),  # 2030년부터 2025년까지
+                           index=5)  # 기본값 2025년 선택
+    with col2:
+        month = st.selectbox("월 선택",
+                           options=range(1, 13),
+                           index=datetime.now().month-1)
+    st.markdown("---")  # 구분선 추가
+    
+    start_date = datetime(year, month, 1).date()
+    end_date = (datetime(year, month+1, 1) - pd.Timedelta(days=1)).date()
+    
+    # 해당 월의 데이터 필터링
+    monthly_data = st.session_state.daily_records[
+        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year) &
+        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month)
+    ]
+    
+    show_report_content(monthly_data, "월간", start_date, end_date)
 
 def show_yearly_report():
     st.title("📈 연간 리포트")
@@ -1213,52 +1135,6 @@ def show_weekly_report():
     ]
     
     show_report_content(weekly_data, "주간", start_of_week, end_of_week)
-
-def show_monthly_report():
-    """월간 리포트"""
-    st.title("📊 월간 리포트")
-    
-    # 연월 선택
-    col1, col2 = st.columns(2)
-    with col1:
-        year = st.selectbox("연도 선택", 
-                           options=range(2024, 2020, -1),
-                           index=0)
-    with col2:
-        month = st.selectbox("월 선택",
-                           options=range(1, 13),
-                           index=datetime.now().month-1)
-    st.markdown("---")  # 구분선 추가
-    
-    start_date = datetime(year, month, 1).date()
-    end_date = (datetime(year, month+1, 1) - pd.Timedelta(days=1)).date()
-    
-    # 해당 월의 데이터 필터링
-    monthly_data = st.session_state.daily_records[
-        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year) &
-        (pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month)
-    ]
-    
-    show_report_content(monthly_data, "월간", start_date, end_date)
-
-def show_yearly_report():
-    """연간 리포트"""
-    st.title("📊 연간 리포트")
-    
-    # 연도 선택
-    year = st.selectbox("연도 선택", 
-                       options=pd.to_datetime(st.session_state.daily_records['날짜']).dt.year.unique())
-    st.markdown("---")  # 구분선 추가
-    
-    start_date = datetime(year, 1, 1).date()
-    end_date = datetime(year, 12, 31).date()
-    
-    # 해당 연도의 데이터 필터링
-    yearly_data = st.session_state.daily_records[
-        pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year
-    ]
-    
-    show_report_content(yearly_data, "연간", start_date, end_date)
 
 def show_report_content(data, period_type, start_date, end_date):
     """리포트 내용 표시 (타이틀 제외)"""
