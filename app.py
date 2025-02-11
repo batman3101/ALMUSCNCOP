@@ -293,7 +293,7 @@ def create_production_chart(data, worker_col, title):
     # 목표수량 바 차트 (하늘색)
     fig.add_trace(go.Bar(
         name='목표수량',
-        x=data[worker_col],
+        x=data[worker_col],  # 작업자명으로 변경
         y=data['목표수량'],
         marker_color='rgba(158,202,225,0.8)',
         opacity=0.8
@@ -302,7 +302,7 @@ def create_production_chart(data, worker_col, title):
     # 생산수량 꺾은선 그래프 (파란색)
     fig.add_trace(go.Scatter(
         name='생산수량',
-        x=data[worker_col],
+        x=data[worker_col],  # 작업자명으로 변경
         y=data['생산수량'],
         line=dict(color='rgb(49,130,189)', width=2),
         mode='lines+markers'
@@ -311,7 +311,7 @@ def create_production_chart(data, worker_col, title):
     # 불량수량 꺾은선 그래프 (빨간색)
     fig.add_trace(go.Scatter(
         name='불량수량',
-        x=data[worker_col],
+        x=data[worker_col],  # 작업자명으로 변경
         y=data['불량수량'],
         line=dict(color='rgb(255,0,0)', width=2),
         mode='lines+markers'
@@ -324,11 +324,14 @@ def create_production_chart(data, worker_col, title):
         yaxis_title='수량',
         showlegend=True,
         height=500,
-        width=None,  # 자동 조정
+        width=None,
         margin=dict(l=50, r=50, t=50, b=50),
         xaxis=dict(
             tickangle=0,
-            type='category'
+            type='category',
+            tickmode='array',
+            ticktext=data[worker_col],  # 작업자명 표시
+            tickvals=data[worker_col]
         ),
         yaxis=dict(
             gridcolor='rgba(0,0,0,0.1)',
@@ -914,23 +917,20 @@ def show_worker_registration():
 def show_monthly_report():
     """월간 리포트"""
     st.title("📊 월간 리포트")
-    
-    # 연월 선택
     col1, col2 = st.columns(2)
     with col1:
         year = st.selectbox("연도 선택", 
-                           options=range(2030, 2024, -1),  # 2030년부터 2025년까지
-                           index=5)  # 기본값 2025년 선택
+                           options=range(2030, 2024, -1),
+                           index=5)
     with col2:
         month = st.selectbox("월 선택",
                            options=range(1, 13),
                            index=datetime.now().month-1)
-    st.markdown("---")  # 구분선 추가
+    st.markdown("---")
     
     start_date = datetime(year, month, 1).date()
     end_date = (datetime(year, month+1, 1) - pd.Timedelta(days=1)).date()
     
-    # 해당 월의 데이터 필터링
     monthly_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year) &
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.month == month)
@@ -939,93 +939,21 @@ def show_monthly_report():
     show_report_content(monthly_data, "월간", start_date, end_date)
 
 def show_yearly_report():
-    st.title("📈 연간 리포트")
+    """연간 리포트"""
+    st.title("📊 연간 리포트")
+    year = st.selectbox("연도 선택", 
+                       options=range(2030, 2024, -1),
+                       index=5)
+    st.markdown("---")
     
-    if len(st.session_state.daily_records) > 0:
-        # 연도 선택
-        year = st.selectbox(
-            "연도 선택", 
-            options=pd.to_datetime(st.session_state.daily_records['날짜']).dt.year.unique()
-        )
-        
-        # 작업자 선택 드롭다운
-        worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-        all_workers = ['전체'] + list(worker_names.values())
-        selected_worker = st.selectbox("작업자 선택", options=all_workers)
-        
-        # 연간 데이터 필터링
-        yearly_data = st.session_state.daily_records[
-            pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year
-        ]
-        
-        # 선택된 작업자에 대한 필터링
-        if selected_worker != '전체':
-            worker_id = [k for k, v in worker_names.items() if v == selected_worker][0]
-            yearly_data = yearly_data[yearly_data['작업자'] == worker_id]
-        
-        if len(yearly_data) > 0:
-            # 이전 연도 데이터 가져오기 및 KPI 대시보드 표시
-            previous_data = st.session_state.daily_records[
-                pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year - 1
-            ]
-            show_best_kpi_dashboard(yearly_data, previous_data, "연간")
-            
-            st.divider()  # 구분선 추가
-            
-            st.subheader(f"기간: {year}년")
-            
-            # KPI 계산
-            achievement_rate, defect_rate, efficiency_rate = calculate_kpi(yearly_data)
-            
-            st.divider()  # 구분선 추가
-            
-            # KPI 지표 표시
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("연간 생산목표달성률", f"{achievement_rate:.2f}%")
-            with col2:
-                st.metric("연간 불량률", f"{defect_rate:.2f}%")
-            with col3:
-                st.metric("연간 작업효율", f"{efficiency_rate:.2f}%")
-            
-            st.divider()  # 구분선 추가
-            
-            # 작업자별 실적 표시
-            st.subheader("작업자별 실적")
-            
-            # 작업자 이름 매핑
-            worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
-            yearly_data['작업자명'] = yearly_data['작업자'].map(worker_names)
-            
-            # 작업자별 집계 데이터 계산
-            worker_summary = yearly_data.groupby('작업자명').agg({
-                '목표수량': 'sum',
-                '생산수량': 'sum',
-                '불량수량': 'sum'
-            }).reset_index()
-            
-            # 작업자별 KPI 계산
-            worker_summary = calculate_worker_kpi(worker_summary)
-            
-            # 데이터 표시
-            st.dataframe(worker_summary, hide_index=True)
-            
-            # 월별 추이 차트
-        monthly_trend = yearly_data.groupby(
-            pd.to_datetime(yearly_data['날짜']).dt.strftime('%Y-%m')
-        ).agg({
-            '생산수량': 'sum',
-            '목표수량': 'sum',
-            '불량수량': 'sum'
-        }).reset_index()
-        
-        fig = create_production_chart(monthly_trend, '날짜', '월별 생산 현황')
-        st.plotly_chart(fig)
-        
-        if len(yearly_data) == 0:
-            st.info(f"{year}년의 생산 데이터가 없습니다.")
-    else:
-        st.info("등록된 생산 실적이 없습니다.")
+    start_date = datetime(year, 1, 1).date()
+    end_date = datetime(year, 12, 31).date()
+    
+    yearly_data = st.session_state.daily_records[
+        pd.to_datetime(st.session_state.daily_records['날짜']).dt.year == year
+    ]
+    
+    show_report_content(yearly_data, "연간", start_date, end_date)
 
 def show_user_management():
     st.title("👤 사용자 관리")
@@ -1111,12 +1039,9 @@ def show_user_management():
 def show_daily_report():
     """일간 리포트"""
     st.title("📊 일간 리포트")
-    
-    # 날짜 선택
     selected_date = st.date_input("날짜 선택", datetime.now())
-    st.markdown("---")  # 구분선 추가
+    st.markdown("---")
     
-    # 해당 날짜의 데이터 필터링
     daily_data = st.session_state.daily_records[
         pd.to_datetime(st.session_state.daily_records['날짜']).dt.date == selected_date
     ]
@@ -1126,14 +1051,11 @@ def show_daily_report():
 def show_weekly_report():
     """주간 리포트"""
     st.title("📊 주간 리포트")
-    
-    # 주 시작일 선택
     selected_date = st.date_input("조회할 주의 시작일 선택", datetime.now())
     start_of_week = selected_date - pd.Timedelta(days=selected_date.weekday())
     end_of_week = start_of_week + pd.Timedelta(days=6)
-    st.markdown("---")  # 구분선 추가
+    st.markdown("---")
     
-    # 해당 주의 데이터 필터링
     weekly_data = st.session_state.daily_records[
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date >= start_of_week) &
         (pd.to_datetime(st.session_state.daily_records['날짜']).dt.date <= end_of_week)
@@ -1515,8 +1437,15 @@ def show_report_template(data, period_type, start_date, end_date):
     # 작업자별 생산 현황 차트로 수정
     st.subheader("작업자별 생산 현황")
     
-    # 작업자 이름으로 그룹화
-    worker_production = data.groupby('작업자').agg({
+    # 작업자 이름 매핑 가져오기
+    worker_names = st.session_state.workers.set_index('사번')['이름'].to_dict()
+    
+    # 데이터 복사 및 작업자 이름 매핑
+    chart_data = data.copy()
+    chart_data['작업자명'] = chart_data['작업자'].map(worker_names)
+    
+    # 작업자별로 데이터 그룹화
+    worker_production = chart_data.groupby('작업자명').agg({
         '목표수량': 'sum',
         '생산수량': 'sum',
         '불량수량': 'sum'
@@ -1524,7 +1453,7 @@ def show_report_template(data, period_type, start_date, end_date):
     
     fig = create_production_chart(
         worker_production, 
-        '작업자', 
+        '작업자명',  # x축에 작업자명 사용
         f'{period_type} 작업자별 생산 현황'
     )
     st.plotly_chart(fig, use_container_width=True)
