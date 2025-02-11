@@ -49,35 +49,25 @@ def init_google_sheets():
         return None
 
 def show_login():
-    st.title("🔐 CNC 작업자 KPI 관리 시스템 로그인")
-    
-    # 먼저 사용자 데이터 동기화
-    sync_users_with_sheets()
+    """로그인 페이지"""
+    st.title("🔐 로그인")
     
     with st.form("login_form"):
-        email = st.text_input("이메일")
+        username = st.text_input("아이디")
         password = st.text_input("비밀번호", type="password")
         submitted = st.form_submit_button("로그인")
         
         if submitted:
-            # 디버깅을 위한 정보 출력
-            st.write("현재 등록된 사용자:", st.session_state.users['이메일'].tolist())
-            
-            user = st.session_state.users[st.session_state.users['이메일'] == email]
-            if len(user) > 0:
-                try:
-                    stored_password = user.iloc[0]['비밀번호']
-                    if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                        st.session_state.authenticated = True
-                        st.session_state.user_role = user.iloc[0]['권한']
-                        st.success("로그인 성공!")
-                        st.rerun()
-                    else:
-                        st.error("비밀번호가 일치하지 않습니다.")
-                except Exception as e:
-                    st.error(f"로그인 처리 중 오류 발생: {str(e)}")
+            if username == st.secrets["admin_username"] and password == st.secrets["admin_password"]:
+                st.session_state.user_role = "admin"
+                st.session_state.logged_in = True
+                st.rerun()
+            elif verify_user_credentials(username, password):
+                st.session_state.user_role = "user"
+                st.session_state.logged_in = True
+                st.rerun()
             else:
-                st.error("등록되지 않은 이메일입니다.")
+                st.error("잘못된 아이디 또는 비밀번호입니다.")
 
 def init_admin_account():
     """관리자 계정 초기화"""
@@ -424,7 +414,6 @@ def show_best_kpi_dashboard(current_data, previous_data=None, period=""):
 
 def main():
     """메인 함수"""
-    # 페이지 설정
     st.set_page_config(
         page_title="생산관리 시스템",
         page_icon="📊",
@@ -432,39 +421,60 @@ def main():
     )
     
     # 세션 스테이트 초기화
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'user_role' not in st.session_state:
+        st.session_state.user_role = None
     if 'workers' not in st.session_state:
         st.session_state.workers = pd.DataFrame()
     if 'daily_records' not in st.session_state:
         st.session_state.daily_records = pd.DataFrame()
     
-    try:
-        # 관리자 계정 초기화
-        if init_admin_account():
-            # 사이드바 메뉴
+    # 로그인 상태가 아닌 경우 로그인 페이지 표시
+    if not st.session_state.logged_in:
+        show_login()
+        return
+    
+    # 관리자 계정 초기화
+    if init_admin_account():
+        # 사이드바 메뉴
+        if st.session_state.user_role == "admin":
             menu = st.sidebar.selectbox(
                 "메뉴 선택",
-                ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트", "일일 생산 실적 입력/수정"]
+                ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트", 
+                 "일일 생산 실적 입력/수정", "사용자 관리", "작업자 관리"]
             )
-            
-            # 선택된 메뉴에 따라 페이지 표시
-            if menu == "대시보드":
-                show_dashboard()
-            elif menu == "일간 리포트":
-                show_daily_report()
-            elif menu == "주간 리포트":
-                show_weekly_report()
-            elif menu == "월간 리포트":
-                show_monthly_report()
-            elif menu == "연간 리포트":
-                show_yearly_report()
-            elif menu == "일일 생산 실적 입력/수정":
-                show_daily_production()
         else:
-            st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
-            
-    except Exception as e:
-        st.error(f"시스템 실행 중 오류 발생: {str(e)}")
-        st.error("시스템을 다시 시작해주세요.")
+            menu = st.sidebar.selectbox(
+                "메뉴 선택",
+                ["대시보드", "일간 리포트", "주간 리포트", "월간 리포트", "연간 리포트"]
+            )
+        
+        # 로그아웃 버튼
+        if st.sidebar.button("로그아웃"):
+            st.session_state.logged_in = False
+            st.session_state.user_role = None
+            st.rerun()
+        
+        # 선택된 메뉴에 따라 페이지 표시
+        if menu == "대시보드":
+            show_dashboard()
+        elif menu == "일간 리포트":
+            show_daily_report()
+        elif menu == "주간 리포트":
+            show_weekly_report()
+        elif menu == "월간 리포트":
+            show_monthly_report()
+        elif menu == "연간 리포트":
+            show_yearly_report()
+        elif menu == "일일 생산 실적 입력/수정":
+            show_daily_production()
+        elif menu == "사용자 관리":
+            show_user_management()
+        elif menu == "작업자 관리":
+            show_worker_management()
+    else:
+        st.error("시스템 초기화에 실패했습니다. 관리자에게 문의하세요.")
 
 def show_dashboard():
     st.title("📊 종합 대시보드")
@@ -715,84 +725,55 @@ def show_duplicate_management():
         else:
             st.info("중복 데이터가 없습니다.")
 
-def show_worker_registration():
-    st.title("👥 작업자 등록")
+def show_user_management():
+    """사용자 등록 관리 페이지"""
+    st.title("👥 사용자 관리")
     
-    # 관리자 계정일 때만 서비스 계정 이메일 표시
-    if st.session_state.user_role == 'admin':
-        print_service_account_email()
+    # 사용자 목록 표시
+    st.subheader("등록된 사용자 목록")
+    users_df = get_users_from_sheets()
+    if not users_df.empty:
+        st.dataframe(users_df, hide_index=True)
     
-    # 구글 시트 동기화 버튼
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("🔄 구글 시트 동기화"):
-            if sync_workers_with_sheets():
-                st.success("작업자 데이터가 구글 시트와 동기화되었습니다.")
-            else:
-                st.warning("동기화할 데이터가 없거나 오류가 발생했습니다.")
-    
-    # 현재 등록된 작업자 목록 표시
-    if len(st.session_state.workers) > 0:
-        st.subheader("등록된 작업자 목록")
-        # hide_index=True를 추가하여 인덱스 열 숨기기
-        st.dataframe(st.session_state.workers, hide_index=True)
-    
-    # 새 작업자 등록 폼
-    st.subheader("새 작업자 등록")
-    with st.form("worker_registration_form"):
-        emp_id = st.text_input("사번")
-        name = st.text_input("이름")
-        department = st.text_input("부서")
-        line_numbers = st.text_input("담당 라인번호")
-        
+    # 새 사용자 등록
+    st.subheader("새 사용자 등록")
+    with st.form("new_user_form"):
+        new_username = st.text_input("아이디")
+        new_password = st.text_input("비밀번호", type="password")
+        new_name = st.text_input("이름")
         submitted = st.form_submit_button("등록")
         
         if submitted:
-            if not emp_id or not name or not department or not line_numbers:
-                st.error("모든 필드를 입력해주세요.")
-                return
-            
-            # 사번 중복 체크
-            if emp_id in st.session_state.workers['사번'].values:
-                st.error("이미 등록된 사번입니다.")
-                return
-            
-            # 새로운 STT 번호 생성 (기존 번호 중 최대값 + 1)
-            if len(st.session_state.workers) > 0:
-                next_stt = f"{int(st.session_state.workers['STT'].max()) + 1:02d}"
-            else:
-                next_stt = "01"
-            
-            new_worker = pd.DataFrame({
-                'STT': [next_stt],
-                '사번': [emp_id],
-                '이름': [name],
-                '부서': [department],
-                '라인번호': [line_numbers]
-            })
-            
-            # 로컬 데이터 업데이트
-            st.session_state.workers = pd.concat([st.session_state.workers, new_worker], ignore_index=True)
-            
-            # 구글 시트 업데이트
-            try:
-                sheets = init_google_sheets()
-                values = [[next_stt, emp_id, name, department, line_numbers]]
-                body = {
-                    'values': values
-                }
-                sheets.values().append(
-                    spreadsheetId=SPREADSHEET_ID,
-                    range='worker!A2:E',  # STT 컬럼 포함
-                    valueInputOption='RAW',
-                    insertDataOption='INSERT_ROWS',
-                    body=body
-                ).execute()
-                
-                st.success(f"작업자 {name}이(가) 등록되었습니다.")
+            if register_new_user(new_username, new_password, new_name):
+                st.success("사용자가 등록되었습니다.")
                 st.rerun()
-            except Exception as e:
-                st.error(f"구글 시트 업데이트 중 오류 발생: {str(e)}")
+            else:
+                st.error("사용자 등록에 실패했습니다.")
+
+def show_worker_management():
+    """작업자 등록 관리 페이지"""
+    st.title("👷 작업자 관리")
+    
+    # 작업자 목록 표시
+    st.subheader("등록된 작업자 목록")
+    if 'workers' in st.session_state:
+        st.dataframe(st.session_state.workers, hide_index=True)
+    
+    # 새 작업자 등록
+    st.subheader("새 작업자 등록")
+    with st.form("new_worker_form"):
+        new_id = st.text_input("사번")
+        new_name = st.text_input("이름")
+        new_dept = st.text_input("부서")
+        new_line = st.text_input("라인번호")
+        submitted = st.form_submit_button("등록")
+        
+        if submitted:
+            if register_new_worker(new_id, new_name, new_dept, new_line):
+                st.success("작업자가 등록되었습니다.")
+                st.rerun()
+            else:
+                st.error("작업자 등록에 실패했습니다.")
 
 def show_monthly_report():
     """월간 리포트"""
@@ -841,87 +822,6 @@ def show_yearly_report():
     ]
     
     show_report_content(yearly_data, "연간", start_date, end_date)
-
-def show_user_management():
-    st.title("👤 사용자 관리")
-    
-    # 사용자 데이터 동기화
-    sync_users_with_sheets()
-    
-    # 기존 사용자 목록 표시
-    if len(st.session_state.users) > 0:
-        st.subheader("등록된 사용자 목록")
-        display_users = st.session_state.users[['이메일', '이름', '권한']].copy()
-        display_users.insert(0, 'STT', range(1, len(display_users) + 1))
-        display_users['STT'] = display_users['STT'].apply(lambda x: f"{x:02d}")
-        st.dataframe(display_users, hide_index=True)
-    
-    # 새 사용자 등록 폼
-    st.subheader("새 사용자 등록")
-    with st.form("user_registration_form"):
-        email = st.text_input("이메일")
-        password = st.text_input("비밀번호", type="password")
-        name = st.text_input("이름")
-        role = st.selectbox("권한", ["user", "admin"])
-        
-        submitted = st.form_submit_button("저장")
-        
-        if submitted:
-            if email in st.session_state.users['이메일'].values:
-                st.error("이미 등록된 이메일입니다.")
-                return
-            
-            if not email or not password or not name:
-                st.error("모든 필드를 입력해주세요.")
-                return
-            
-            # 비밀번호 해싱
-            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-            
-            # 새 사용자 추가
-            new_user = pd.DataFrame({
-                '이메일': [email],
-                '비밀번호': [hashed_password.decode('utf-8')],
-                '이름': [name],
-                '권한': [role]
-            })
-            
-            st.session_state.users = pd.concat([st.session_state.users, new_user], ignore_index=True)
-            
-            # 구글 시트에 백업
-            if backup_users_to_sheets():
-                st.success(f"사용자 {email}가 등록되었습니다.")
-                st.rerun()
-            else:
-                st.error("사용자 등록 중 오류가 발생했습니다.")
-
-    # 사용자 삭제 섹션 추가
-    if len(st.session_state.users) > 0:
-        st.subheader("사용자 삭제")
-        # 관리자 계정(zetooo1972@gmail.com)을 제외한 사용자 목록
-        delete_email = st.selectbox(
-            "삭제할 사용자 선택", 
-            options=st.session_state.users[
-                st.session_state.users['이메일'] != 'zetooo1972@gmail.com'
-            ]['이메일'].tolist()
-        )
-        
-        if st.button("선택한 사용자 삭제"):
-            if delete_email:
-                # 관리자 계정은 삭제 불가
-                if delete_email == 'zetooo1972@gmail.com':
-                    st.error("관리자 계정은 삭제할 수 없습니다.")
-                else:
-                    # 선택한 사용자 삭제
-                    st.session_state.users = st.session_state.users[
-                        st.session_state.users['이메일'] != delete_email
-                    ]
-                    # 구글 시트에 백업
-                    if backup_users_to_sheets():
-                        st.success(f"사용자 {delete_email}가 삭제되었습니다.")
-                        st.rerun()
-                    else:
-                        st.error("사용자 삭제 중 오류가 발생했습니다.")
 
 def show_daily_report():
     """일간 리포트"""
@@ -1314,6 +1214,105 @@ def show_worker_kpi(worker_name, data):
             st.metric("⚠️ 불량률", f"{불량률}%")
         with col3:
             st.metric("🏆 작업효율", f"{작업효율}%")
+
+def verify_user_credentials(username, password):
+    """사용자 로그인 검증"""
+    try:
+        sheets = init_google_sheets()
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A2:C'
+        ).execute()
+        
+        users = result.get('values', [])
+        for user in users:
+            if user[0] == username and user[1] == password:
+                return True
+        return False
+    except Exception as e:
+        st.error(f"사용자 검증 중 오류 발생: {str(e)}")
+        return False
+
+def update_production_record(record_data):
+    """생산 기록 업데이트"""
+    try:
+        sheets = init_google_sheets()
+        sheets.values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='production!A2',
+            valueInputOption='USER_ENTERED',
+            body={'values': [record_data]}
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"생산 기록 업데이트 중 오류 발생: {str(e)}")
+        return False
+
+def check_duplicate_records(date, worker_id):
+    """중복 기록 확인"""
+    try:
+        records = st.session_state.daily_records
+        return len(records[(records['날짜'] == date) & (records['작업자'] == worker_id)]) > 0
+    except Exception as e:
+        st.error(f"중복 확인 중 오류 발생: {str(e)}")
+        return True
+
+def get_users_from_sheets():
+    """사용자 목록 가져오기"""
+    try:
+        sheets = init_google_sheets()
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A2:C'
+        ).execute()
+        
+        values = result.get('values', [])
+        if values:
+            return pd.DataFrame(values, columns=['아이디', '비밀번호', '이름'])
+        return pd.DataFrame(columns=['아이디', '비밀번호', '이름'])
+    except Exception as e:
+        st.error(f"사용자 목록 조회 중 오류 발생: {str(e)}")
+        return pd.DataFrame(columns=['아이디', '비밀번호', '이름'])
+
+def register_new_user(username, password, name):
+    """새 사용자 등록"""
+    try:
+        sheets = init_google_sheets()
+        sheets.values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='users!A2',
+            valueInputOption='USER_ENTERED',
+            body={'values': [[username, password, name]]}
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"사용자 등록 중 오류 발생: {str(e)}")
+        return False
+
+def register_new_worker(worker_id, name, dept, line):
+    """새 작업자 등록"""
+    try:
+        sheets = init_google_sheets()
+        # 현재 마지막 STT 번호 확인
+        result = sheets.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='worker!A2:A'
+        ).execute()
+        
+        values = result.get('values', [])
+        next_stt = len(values) + 1
+        
+        # 새 작업자 추가
+        sheets.values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='worker!A2',
+            valueInputOption='USER_ENTERED',
+            body={'values': [[str(next_stt), worker_id, name, dept, line]]}
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"작업자 등록 중 오류 발생: {str(e)}")
+        return False
 
 if __name__ == "__main__":
     main()
